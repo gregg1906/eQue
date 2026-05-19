@@ -1,7 +1,9 @@
 # eQue monorepo
 
 Backend: Python
+
 Web: React
+
 Mobile: Flutter
 
 ## 1. Wymagania
@@ -14,8 +16,11 @@ Aby poprawnie uruchomić projekt potrzebujemy:
 ---
 
 ## 2. Infrastruktura 
+
 Platforma - Docker
+
 DB - PostgreSQL
+
 Cache - Redis
 
 # Uruchomienie środowiska
