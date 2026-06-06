@@ -3,19 +3,32 @@ import { useState } from 'react';
 interface Device {
   id: string;
   name: string;
-  location: string;
+  locationId: string;
+}
+
+interface Location {
+  id: string;
+  name: string;
 }
 
 export default function AdminDashboard() {
+  const [locations] = useState<Location[]>(() => {
+    const savedLocations = localStorage.getItem('eque_locations');
+    if (savedLocations) return JSON.parse(savedLocations);
+    return [
+      { id: 'loc1', name: 'Hol Główny' },
+      { id: 'loc2', name: 'Okienko Rejestracji 1' },
+      { id: 'loc3', name: 'Gabinet Kardiologiczny 12' }
+    ];
+  });
+
   const [devices, setDevices] = useState<Device[]>(() => {
     const savedDevices = localStorage.getItem('eque_devices');
-    if (savedDevices) {
-      return JSON.parse(savedDevices);
-    }
+    if (savedDevices) return JSON.parse(savedDevices);
     return [
-      { id: '1', name: 'Tablet Wejściowy', location: 'Hol Główny' },
-      { id: '2', name: 'Tablet Rejestracja', location: 'Okienko 1' },
-      { id: '3', name: 'Kiosk Kardiologia', location: 'Piętro 2' },
+      { id: 'dev1', name: 'Tablet Wejściowy', locationId: 'loc1' },
+      { id: 'dev2', name: 'Tablet Rejestracja', locationId: 'loc2' },
+      { id: 'dev3', name: 'Kiosk Kardiologia', locationId: 'loc3' },
     ];
   });
   
@@ -24,8 +37,8 @@ export default function AdminDashboard() {
   const handleSimulateScan = () => {
     const newDevice: Device = {
       id: Date.now().toString(),
-      name: `Nowy Tablet (${devices.length + 1})`,
-      location: 'Nieprzypisany',
+      name: '',
+      locationId: '',
     };
     
     const updatedDevices = [...devices, newDevice];
@@ -35,7 +48,12 @@ export default function AdminDashboard() {
   };
 
   const handleRowClick = (deviceId: string) => {
-    console.log("Przygotowane pod nawigację do urządzenia:", deviceId);
+    console.log("Nawigacja do urządzenia:", deviceId);
+  };
+
+  const getLocationName = (locId: string) => {
+    const loc = locations.find(l => l.id === locId);
+    return loc ? loc.name : '';
   };
 
   return (
@@ -52,31 +70,38 @@ export default function AdminDashboard() {
 
       <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-gray-200">
         <ul className="divide-y divide-gray-100">
-          {devices.map((device) => (
-            <li key={device.id}>
-              <button 
-                onClick={() => handleRowClick(device.id)}
-                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
-              >
-                <div>
-                  <p className="font-semibold text-gray-800 transition-colors group-hover:text-[#1877f2]">
-                    {device.name}
-                  </p>
-                  <p className="text-sm text-gray-500">Lokalizacja: {device.location}</p>
-                </div>
-                <div>
-                  <svg 
-                    className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[#1877f2]" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </button>
-            </li>
-          ))}
+          {devices.map((device) => {
+            const isNameMissing = !device.name || device.name.startsWith('Nowy Tablet (');
+            const isLocMissing = !device.locationId;
+            
+            return (
+              <li key={device.id}>
+                <button 
+                  onClick={() => handleRowClick(device.id)}
+                  className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
+                >
+                  <div>
+                    <p className={`font-semibold transition-colors group-hover:text-[#1877f2] ${isNameMissing ? 'text-red-500' : 'text-gray-800'}`}>
+                      {isNameMissing ? 'Nazwa nie została ustawiona' : device.name}
+                    </p>
+                    <p className={`text-sm ${isLocMissing ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
+                      Lokalizacja: {isLocMissing ? 'Nieprzypisany do żadnej lokacji' : getLocationName(device.locationId)}
+                    </p>
+                  </div>
+                  <div>
+                    <svg 
+                      className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[#1877f2]" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
           {devices.length === 0 && (
             <li className="p-6 text-center text-gray-500">Brak dodanych urządzeń.</li>
           )}

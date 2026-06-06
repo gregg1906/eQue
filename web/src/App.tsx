@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import LoginForm from './components/LoginForm';
 import AdminDashboard from './components/AdminDashboard';
+import AdminLocations from './components/AdminLocations';
+import AdminUsers from './components/AdminUsers';
 import Sidebar from './components/Sidebar';
 
 type Role = 'admin' | 'user' | null;
@@ -64,13 +66,9 @@ export default function App() {
               ) : activeTab === 'tablety' ? (
                 <AdminDashboard />
               ) : activeTab === 'lokalizacje' ? (
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
-                  <p className="text-gray-500">Moduł lokalizacji (w przygotowaniu)</p>
-                </div>
+                <AdminLocations />
               ) : activeTab === 'uzytkownicy' ? (
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
-                  <p className="text-gray-500">Moduł użytkowników (w przygotowaniu)</p>
-                </div>
+                <AdminUsers />
               ) : (
                 <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
                   <p className="text-gray-500">Pusta zakładka</p>
