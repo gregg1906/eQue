@@ -1,0 +1,37 @@
+from fastapi import FastAPI
+from schemas.api_schemas import (
+    QRCodeResponse, JoinQueueRequest, JoinQueueResponse
+)
+
+app = FastAPI(
+    title="eQue API",
+    description="Backend aplikacji eQue",
+    version="1.0.0"
+)
+
+# TO MUSI ODPOWIEDZIEĆ. JAK NIE ODPOWIADA TO SERWER LEŻY
+@app.get("/")
+async def root():
+    return{"message":"Witaj w eQue API. Serwer działa."}
+
+
+# ENDPOINTY DLA TABLETU
+
+@app.get("/api/v1/kiosk/qr", response_model=QRCodeResponse, tags=["Tablet"])
+async def get_new_qr_code():
+    #POBIERA NOWY KOD QR
+    # TODO PODPIECIE REDISA
+    return {"qr_token": "mock_uuid_123456789", "expires_in_seconds": 30}
+
+
+# ENDPOINTY DLA PACJENTA
+
+@app.post("/api/v1/queue/join", response_model=JoinQueueResponse, tags=["Patient"])
+async def join_queue(request: JoinQueueRequest):
+    #REJESTRUJE W KOLEJCE NA PODSTAWIE KODU QR
+    # TODO WERYFIKACJA TOKENU W REDIS I ZAPISANIE W BAZIE
+    return {
+        "patient_id": "patient_abc_999",
+        "queue_position": 4,
+        "estimated_wait_time_minutes": 60
+    }
