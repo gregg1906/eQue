@@ -4,6 +4,8 @@ import AdminDashboard from './components/AdminDashboard';
 import AdminLocations from './components/AdminLocations';
 import AdminUsers from './components/AdminUsers';
 import Sidebar from './components/Sidebar';
+import UserSidebar from './components/UserSidebar';
+import UserQueue from './components/UserQueue';
 
 type Role = 'admin' | 'user' | null;
 
@@ -21,6 +23,7 @@ export default function App() {
   const handleLoginSuccess = (loggedRole: 'admin' | 'user', loggedName: string) => {
     setRole(loggedRole);
     setUserName(loggedName);
+    setActiveTab('strona_glowna');
     localStorage.setItem('eque_role', loggedRole);
     localStorage.setItem('eque_userName', loggedName);
   };
@@ -55,6 +58,9 @@ export default function App() {
         {role === 'admin' && (
           <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
         )}
+        {role === 'user' && (
+          <UserSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        )}
 
         <main className="flex-1 overflow-y-auto px-4 py-8">
           <div className="mx-auto w-full max-w-5xl">
@@ -74,16 +80,15 @@ export default function App() {
                   <p className="text-gray-500">Pusta zakładka</p>
                 </div>
               )
-            ) : (
-              <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
-                <h2 className="mb-4 text-xl font-bold text-gray-800">
-                  Panel Personelu (Użytkownika)
-                </h2>
-                <p className="text-gray-600">
-                  Zalogowano pomyślnie. Wkrótce dodamy tutaj podgląd i zarządzanie kolejką pacjentów.
-                </p>
-              </div>
-            )}
+            ) : role === 'user' ? (
+              activeTab === 'kolejka' ? (
+                <UserQueue userName={userName} />
+              ) : (
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
+                  <p className="text-gray-500">Strona główna (w przygotowaniu)</p>
+                </div>
+              )
+            ) : null}
           </div>
         </main>
       </div>

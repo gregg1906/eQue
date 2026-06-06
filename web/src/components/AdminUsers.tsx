@@ -290,22 +290,22 @@ export default function AdminUsers() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Stanowisko / Rola</label>
-              <input
-                type="text"
-                value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value)}
-                placeholder="np. Recepcjonistka"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
-              />
-            </div>
-            <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">Hasło</label>
               <input
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Hasło do logowania"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Stanowisko / Rola</label>
+              <input
+                type="text"
+                value={newUserRole}
+                onChange={(e) => setNewUserRole(e.target.value)}
+                placeholder="np. Recepcjonistka"
                 className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
               />
             </div>
