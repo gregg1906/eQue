@@ -38,6 +38,8 @@ export default function AdminUsers() {
   const [newFullName, setNewFullName] = useState('');
   const [newUserRole, setNewUserRole] = useState('');
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
 
   const handleAddUser = () => {
     if (!newFullName.trim()) return;
@@ -53,17 +55,14 @@ export default function AdminUsers() {
     setUsers(updatedUsers);
     localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
     
-    const allLocations: Location[] = JSON.parse(localStorage.getItem('eque_locations') || '[]');
-    const updatedLocations = allLocations.map((l: Location) => {
+    const updatedLocations = locations.map((l: Location) => {
       if (selectedLocationIds.includes(l.id)) {
         return { ...l, userIds: Array.from(new Set([...(l.userIds || []), newUser.id])) };
       }
       return l;
     });
-    if (allLocations.length > 0) {
-      localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
-      setLocations(updatedLocations);
-    }
+    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
+    setLocations(updatedLocations);
     
     setIsSidePanelOpen(false);
     setNewFullName('');
@@ -71,8 +70,24 @@ export default function AdminUsers() {
     setSelectedLocationIds([]);
   };
 
-  const handleRowClick = (userId: string) => {
-    console.log("Nawigacja do użytkownika:", userId);
+  const handleSaveEdit = () => {
+    if (!editingUser) return;
+    
+    const updatedUsers = users.map(u => u.id === editingUser.id ? editingUser : u);
+    setUsers(updatedUsers);
+    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
+
+    const updatedLocations = locations.map((l: Location) => {
+      const filteredUsers = (l.userIds || []).filter(id => id !== editingUser.id);
+      if (editingUser.locationIds.includes(l.id)) {
+        filteredUsers.push(editingUser.id);
+      }
+      return { ...l, userIds: Array.from(new Set(filteredUsers)) };
+    });
+    
+    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
+    setLocations(updatedLocations);
+    setEditingUser(null);
   };
 
   const getInitials = (name: string) => {
@@ -82,8 +97,91 @@ export default function AdminUsers() {
     return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
   };
 
+  if (editingUser) {
+    return (
+      <div className="mx-auto max-w-2xl animate-fade-in">
+        <button 
+          onClick={() => setEditingUser(null)}
+          className="mb-6 flex items-center text-sm font-semibold text-gray-500 transition-colors hover:text-gray-800"
+        >
+          <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Wróć do listy pracowników
+        </button>
+
+        <div className="rounded-xl bg-white p-8 shadow-sm border border-gray-200">
+          <div className="mb-6 flex items-center space-x-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-[#1877f2]">
+              {getInitials(editingUser.fullName)}
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">Edycja pracownika</h2>
+          </div>
+          
+          <div className="flex flex-col space-y-5">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Imię i nazwisko</label>
+              <input
+                type="text"
+                value={editingUser.fullName}
+                onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Stanowisko / Rola</label>
+              <input
+                type="text"
+                value={editingUser.role}
+                onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisane lokalizacje</label>
+              <div className="max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white">
+                {locations.map(loc => (
+                  <label key={loc.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                    <input
+                      type="checkbox"
+                      checked={editingUser.locationIds.includes(loc.id)}
+                      onChange={(e) => {
+                        const newLocationIds = e.target.checked 
+                          ? [...editingUser.locationIds, loc.id]
+                          : editingUser.locationIds.filter(id => id !== loc.id);
+                        setEditingUser({ ...editingUser, locationIds: newLocationIds });
+                      }}
+                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{loc.name}</span>
+                  </label>
+                ))}
+                {locations.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych lokalizacji</div>}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex justify-end space-x-3 border-t border-gray-100 pt-6">
+            <button
+              onClick={() => setEditingUser(null)}
+              className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+            >
+              Zapisz zmiany
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative">
+    <div className="relative animate-fade-in">
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Zarządzanie personelem</h2>
         <button
@@ -99,7 +197,7 @@ export default function AdminUsers() {
           {users.map((user) => (
             <li key={user.id}>
               <button 
-                onClick={() => handleRowClick(user.id)}
+                onClick={() => setEditingUser(user)}
                 className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
               >
                 <div className="flex items-center space-x-4">

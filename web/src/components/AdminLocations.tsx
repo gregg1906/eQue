@@ -38,6 +38,8 @@ export default function AdminLocations() {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
 
   const handleAddLocation = () => {
     if (!newName.trim()) return;
@@ -53,17 +55,14 @@ export default function AdminLocations() {
     setLocations(updatedLocations);
     localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
     
-    const allUsers: UserData[] = JSON.parse(localStorage.getItem('eque_users') || '[]');
-    const updatedUsers = allUsers.map((u: UserData) => {
+    const updatedUsers = users.map((u: UserData) => {
       if (selectedUserIds.includes(u.id)) {
         return { ...u, locationIds: Array.from(new Set([...(u.locationIds || []), newLocation.id])) };
       }
       return u;
     });
-    if (allUsers.length > 0) {
-      localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
-      setUsers(updatedUsers);
-    }
+    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
+    setUsers(updatedUsers);
     
     setIsSidePanelOpen(false);
     setNewName('');
@@ -71,12 +70,106 @@ export default function AdminLocations() {
     setSelectedUserIds([]);
   };
 
-  const handleRowClick = (locationId: string) => {
-    console.log("Nawigacja do lokalizacji:", locationId);
+  const handleSaveEdit = () => {
+    if (!editingLocation) return;
+    
+    const updatedLocations = locations.map(l => l.id === editingLocation.id ? editingLocation : l);
+    setLocations(updatedLocations);
+    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
+
+    const updatedUsers = users.map((u: UserData) => {
+      const filteredLocs = (u.locationIds || []).filter(id => id !== editingLocation.id);
+      if (editingLocation.userIds.includes(u.id)) {
+        filteredLocs.push(editingLocation.id);
+      }
+      return { ...u, locationIds: Array.from(new Set(filteredLocs)) };
+    });
+    
+    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
+    setUsers(updatedUsers);
+    setEditingLocation(null);
   };
 
+  if (editingLocation) {
+    return (
+      <div className="mx-auto max-w-2xl animate-fade-in">
+        <button 
+          onClick={() => setEditingLocation(null)}
+          className="mb-6 flex items-center text-sm font-semibold text-gray-500 transition-colors hover:text-gray-800"
+        >
+          <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Wróć do listy lokalizacji
+        </button>
+
+        <div className="rounded-xl bg-white p-8 shadow-sm border border-gray-200">
+          <h2 className="mb-6 text-2xl font-bold text-gray-800">Edycja lokalizacji</h2>
+          
+          <div className="flex flex-col space-y-5">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Nazwa lokalizacji</label>
+              <input
+                type="text"
+                value={editingLocation.name}
+                onChange={(e) => setEditingLocation({ ...editingLocation, name: e.target.value })}
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Opis</label>
+              <textarea
+                value={editingLocation.description}
+                onChange={(e) => setEditingLocation({ ...editingLocation, description: e.target.value })}
+                rows={3}
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisani użytkownicy</label>
+              <div className="max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white">
+                {users.map(user => (
+                  <label key={user.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                    <input
+                      type="checkbox"
+                      checked={editingLocation.userIds.includes(user.id)}
+                      onChange={(e) => {
+                        const newUserIds = e.target.checked 
+                          ? [...editingLocation.userIds, user.id]
+                          : editingLocation.userIds.filter(id => id !== user.id);
+                        setEditingLocation({ ...editingLocation, userIds: newUserIds });
+                      }}
+                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{user.fullName}</span>
+                  </label>
+                ))}
+                {users.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych użytkowników</div>}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex justify-end space-x-3 border-t border-gray-100 pt-6">
+            <button
+              onClick={() => setEditingLocation(null)}
+              className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+            >
+              Zapisz zmiany
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative">
+    <div className="relative animate-fade-in">
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-800">Zarządzanie lokalizacjami</h2>
         <button
@@ -92,7 +185,7 @@ export default function AdminLocations() {
           {locations.map((location) => (
             <li key={location.id}>
               <button 
-                onClick={() => handleRowClick(location.id)}
+                onClick={() => setEditingLocation(location)}
                 className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
               >
                 <div>
