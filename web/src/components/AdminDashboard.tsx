@@ -50,8 +50,18 @@ export default function AdminDashboard() {
 
   const handleSaveEdit = () => {
     if (!editingDevice) return;
-    
+
     const updatedDevices = devices.map(d => d.id === editingDevice.id ? editingDevice : d);
+    setDevices(updatedDevices);
+    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
+    setEditingDevice(null);
+  };
+
+  const handleDeleteDevice = () => {
+    if (!editingDevice) return;
+    if (!window.confirm(`Czy na pewno chcesz usunąć tablet "${editingDevice.name || 'bez nazwy'}"? Tej operacji nie można cofnąć.`)) return;
+
+    const updatedDevices = devices.filter(d => d.id !== editingDevice.id);
     setDevices(updatedDevices);
     localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
     setEditingDevice(null);
@@ -96,7 +106,7 @@ export default function AdminDashboard() {
                 onChange={(e) => setEditingDevice({ ...editingDevice, locationId: e.target.value })}
                 className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] bg-white"
               >
-                <option value="" disabled>Nieprzypisany do żadnej lokacji</option>
+                <option value="">Nieprzypisany do żadnej lokacji</option>
                 {locations.map(loc => (
                   <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
@@ -104,19 +114,27 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="mt-8 flex justify-end space-x-3 border-t border-gray-100 pt-6">
+          <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
             <button
-              onClick={() => setEditingDevice(null)}
-              className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              onClick={handleDeleteDevice}
+              className="rounded-md border border-red-200 bg-red-50 px-6 py-2.5 font-semibold text-red-600 transition-colors hover:bg-red-100"
             >
-              Anuluj
+              Usuń tablet
             </button>
-            <button
-              onClick={handleSaveEdit}
-              className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
-            >
-              Zapisz zmiany
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setEditingDevice(null)}
+                className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+              >
+                Zapisz zmiany
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ interface UserData {
   id: string;
   fullName: string;
   role: string;
+  password: string;
   locationIds: string[];
 }
 
@@ -37,8 +38,8 @@ export default function AdminUsers() {
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [newFullName, setNewFullName] = useState('');
   const [newUserRole, setNewUserRole] = useState('');
-  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
-  
+  const [newPassword, setNewPassword] = useState('');
+
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
 
   const handleAddUser = () => {
@@ -48,26 +49,36 @@ export default function AdminUsers() {
       id: Date.now().toString(),
       fullName: newFullName,
       role: newUserRole.trim() ? newUserRole : 'Brak przypisanej roli',
-      locationIds: selectedLocationIds,
+      password: newPassword,
+      locationIds: [],
     };
-    
+
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
     localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
-    
-    const updatedLocations = locations.map((l: Location) => {
-      if (selectedLocationIds.includes(l.id)) {
-        return { ...l, userIds: Array.from(new Set([...(l.userIds || []), newUser.id])) };
-      }
-      return l;
-    });
-    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
-    setLocations(updatedLocations);
-    
+
     setIsSidePanelOpen(false);
     setNewFullName('');
     setNewUserRole('');
-    setSelectedLocationIds([]);
+    setNewPassword('');
+  };
+
+  const handleDeleteUser = () => {
+    if (!editingUser) return;
+    if (!window.confirm(`Czy na pewno chcesz usunąć pracownika "${editingUser.fullName}"? Tej operacji nie można cofnąć.`)) return;
+
+    const updatedUsers = users.filter(u => u.id !== editingUser.id);
+    setUsers(updatedUsers);
+    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
+
+    const updatedLocations = locations.map((l: Location) => ({
+      ...l,
+      userIds: (l.userIds || []).filter(id => id !== editingUser.id),
+    }));
+    setLocations(updatedLocations);
+    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
+
+    setEditingUser(null);
   };
 
   const handleSaveEdit = () => {
@@ -129,6 +140,16 @@ export default function AdminUsers() {
               />
             </div>
             <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Hasło</label>
+              <input
+                type="password"
+                value={editingUser.password ?? ''}
+                onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                placeholder="Zostaw puste aby nie zmieniać"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
+            </div>
+            <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">Stanowisko / Rola</label>
               <input
                 type="text"
@@ -161,19 +182,27 @@ export default function AdminUsers() {
             </div>
           </div>
 
-          <div className="mt-8 flex justify-end space-x-3 border-t border-gray-100 pt-6">
+          <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
             <button
-              onClick={() => setEditingUser(null)}
-              className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              onClick={handleDeleteUser}
+              className="rounded-md border border-red-200 bg-red-50 px-6 py-2.5 font-semibold text-red-600 transition-colors hover:bg-red-100"
             >
-              Anuluj
+              Usuń pracownika
             </button>
-            <button
-              onClick={handleSaveEdit}
-              className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
-            >
-              Zapisz zmiany
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setEditingUser(null)}
+                className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+              >
+                Zapisz zmiany
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -209,7 +238,7 @@ export default function AdminUsers() {
                       {user.fullName}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {user.role} • Dostęp do lokalizacji: {(user.locationIds || []).length}
+                      {user.role} • Dostęp do lokalizacji: {(user.locationIds || []).filter(id => locations.some(l => l.id === id)).length}
                     </p>
                   </div>
                 </div>
@@ -271,24 +300,14 @@ export default function AdminUsers() {
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisz do lokalizacji (Opcjonalne)</label>
-              <div className="max-h-48 overflow-y-auto rounded-md border border-gray-300 bg-white">
-                {locations.map(loc => (
-                  <label key={loc.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                    <input
-                      type="checkbox"
-                      checked={selectedLocationIds.includes(loc.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedLocationIds([...selectedLocationIds, loc.id]);
-                        else setSelectedLocationIds(selectedLocationIds.filter(id => id !== loc.id));
-                      }}
-                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
-                    />
-                    <span className="text-sm font-medium text-gray-700">{loc.name}</span>
-                  </label>
-                ))}
-                {locations.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych lokalizacji</div>}
-              </div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Hasło</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Hasło do logowania"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+              />
             </div>
           </div>
         </div>

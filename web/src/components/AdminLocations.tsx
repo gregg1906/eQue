@@ -13,7 +13,18 @@ interface UserData {
   locationIds: string[];
 }
 
+interface Device {
+  id: string;
+  name: string;
+  locationId: string;
+}
+
 export default function AdminLocations() {
+  const [devices, setDevices] = useState<Device[]>(() => {
+    const saved = localStorage.getItem('eque_devices');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [users, setUsers] = useState<UserData[]>(() => {
     const savedUsers = localStorage.getItem('eque_users');
     if (savedUsers) return JSON.parse(savedUsers);
@@ -23,7 +34,7 @@ export default function AdminLocations() {
       { id: 'usr3', fullName: 'Piotr Wiśniewski', locationIds: ['loc3'] },
     ];
   });
-  
+
   const [locations, setLocations] = useState<Location[]>(() => {
     const savedLocations = localStorage.getItem('eque_locations');
     if (savedLocations) return JSON.parse(savedLocations);
@@ -33,13 +44,18 @@ export default function AdminLocations() {
       { id: 'loc3', name: 'Gabinet Kardiologiczny 12', description: 'Piętro 2', userIds: ['usr1', 'usr3'] },
     ];
   });
-  
+
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  
+
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [editingLocationDeviceIds, setEditingLocationDeviceIds] = useState<string[]>([]);
+
+  const openEditLocation = (location: Location) => {
+    setEditingLocation(location);
+    setEditingLocationDeviceIds(devices.filter(d => d.locationId === location.id).map(d => d.id));
+  };
 
   const handleAddLocation = () => {
     if (!newName.trim()) return;
@@ -48,31 +64,45 @@ export default function AdminLocations() {
       id: Date.now().toString(),
       name: newName,
       description: newDescription.trim() ? newDescription : 'Brak opisu',
-      userIds: selectedUserIds,
+      userIds: [],
     };
-    
+
     const updatedLocations = [...locations, newLocation];
     setLocations(updatedLocations);
     localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
-    
-    const updatedUsers = users.map((u: UserData) => {
-      if (selectedUserIds.includes(u.id)) {
-        return { ...u, locationIds: Array.from(new Set([...(u.locationIds || []), newLocation.id])) };
-      }
-      return u;
-    });
-    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-    
+
     setIsSidePanelOpen(false);
     setNewName('');
     setNewDescription('');
-    setSelectedUserIds([]);
+  };
+
+  const handleDeleteLocation = () => {
+    if (!editingLocation) return;
+    if (!window.confirm(`Czy na pewno chcesz usunąć lokalizację "${editingLocation.name}"? Tej operacji nie można cofnąć.`)) return;
+
+    const updatedLocations = locations.filter(l => l.id !== editingLocation.id);
+    setLocations(updatedLocations);
+    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
+
+    const updatedUsers = users.map((u: UserData) => ({
+      ...u,
+      locationIds: (u.locationIds || []).filter(id => id !== editingLocation.id),
+    }));
+    setUsers(updatedUsers);
+    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
+
+    const updatedDevices = devices.map(d =>
+      d.locationId === editingLocation.id ? { ...d, locationId: '' } : d
+    );
+    setDevices(updatedDevices);
+    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
+
+    setEditingLocation(null);
   };
 
   const handleSaveEdit = () => {
     if (!editingLocation) return;
-    
+
     const updatedLocations = locations.map(l => l.id === editingLocation.id ? editingLocation : l);
     setLocations(updatedLocations);
     localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
@@ -84,16 +114,28 @@ export default function AdminLocations() {
       }
       return { ...u, locationIds: Array.from(new Set(filteredLocs)) };
     });
-    
-    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
     setUsers(updatedUsers);
+    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
+
+    const updatedDevices = devices.map(d => {
+      if (editingLocationDeviceIds.includes(d.id)) {
+        return { ...d, locationId: editingLocation.id };
+      }
+      if (d.locationId === editingLocation.id) {
+        return { ...d, locationId: '' };
+      }
+      return d;
+    });
+    setDevices(updatedDevices);
+    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
+
     setEditingLocation(null);
   };
 
   if (editingLocation) {
     return (
       <div className="mx-auto max-w-2xl animate-fade-in">
-        <button 
+        <button
           onClick={() => setEditingLocation(null)}
           className="mb-6 flex items-center text-sm font-semibold text-gray-500 transition-colors hover:text-gray-800"
         >
@@ -105,7 +147,7 @@ export default function AdminLocations() {
 
         <div className="rounded-xl bg-white p-8 shadow-sm border border-gray-200">
           <h2 className="mb-6 text-2xl font-bold text-gray-800">Edycja lokalizacji</h2>
-          
+
           <div className="flex flex-col space-y-5">
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">Nazwa lokalizacji</label>
@@ -127,14 +169,14 @@ export default function AdminLocations() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisani użytkownicy</label>
-              <div className="max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white">
+              <div className="max-h-48 overflow-y-auto rounded-md border border-gray-300 bg-white">
                 {users.map(user => (
                   <label key={user.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
                     <input
                       type="checkbox"
                       checked={editingLocation.userIds.includes(user.id)}
                       onChange={(e) => {
-                        const newUserIds = e.target.checked 
+                        const newUserIds = e.target.checked
                           ? [...editingLocation.userIds, user.id]
                           : editingLocation.userIds.filter(id => id !== user.id);
                         setEditingLocation({ ...editingLocation, userIds: newUserIds });
@@ -147,21 +189,53 @@ export default function AdminLocations() {
                 {users.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych użytkowników</div>}
               </div>
             </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisane tablety</label>
+              <div className="max-h-48 overflow-y-auto rounded-md border border-gray-300 bg-white">
+                {devices.map(device => (
+                  <label key={device.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                    <input
+                      type="checkbox"
+                      checked={editingLocationDeviceIds.includes(device.id)}
+                      onChange={(e) => {
+                        setEditingLocationDeviceIds(e.target.checked
+                          ? [...editingLocationDeviceIds, device.id]
+                          : editingLocationDeviceIds.filter(id => id !== device.id)
+                        );
+                      }}
+                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      {device.name || <span className="italic text-gray-400">Tablet bez nazwy</span>}
+                    </span>
+                  </label>
+                ))}
+                {devices.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych tabletów</div>}
+              </div>
+            </div>
           </div>
 
-          <div className="mt-8 flex justify-end space-x-3 border-t border-gray-100 pt-6">
+          <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
             <button
-              onClick={() => setEditingLocation(null)}
-              className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              onClick={handleDeleteLocation}
+              className="rounded-md border border-red-200 bg-red-50 px-6 py-2.5 font-semibold text-red-600 transition-colors hover:bg-red-100"
             >
-              Anuluj
+              Usuń lokalizację
             </button>
-            <button
-              onClick={handleSaveEdit}
-              className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
-            >
-              Zapisz zmiany
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setEditingLocation(null)}
+                className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+              >
+                Zapisz zmiany
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -184,8 +258,8 @@ export default function AdminLocations() {
         <ul className="divide-y divide-gray-100">
           {locations.map((location) => (
             <li key={location.id}>
-              <button 
-                onClick={() => setEditingLocation(location)}
+              <button
+                onClick={() => openEditLocation(location)}
                 className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
               >
                 <div>
@@ -193,7 +267,7 @@ export default function AdminLocations() {
                     {location.name}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {location.description} • Przypisani użytkownicy: {(location.userIds || []).length}
+                    {location.description} • Użytkownicy: {(location.userIds || []).length} • Tablety: {devices.filter(d => d.locationId === location.id).length}
                   </p>
                 </div>
                 <div>
@@ -211,7 +285,7 @@ export default function AdminLocations() {
       </div>
 
       {isSidePanelOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
           onClick={() => setIsSidePanelOpen(false)}
         />
@@ -252,26 +326,6 @@ export default function AdminLocations() {
                 rows={3}
                 className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
               />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisz użytkowników (Opcjonalne)</label>
-              <div className="max-h-48 overflow-y-auto rounded-md border border-gray-300 bg-white">
-                {users.map(user => (
-                  <label key={user.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                    <input
-                      type="checkbox"
-                      checked={selectedUserIds.includes(user.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedUserIds([...selectedUserIds, user.id]);
-                        else setSelectedUserIds(selectedUserIds.filter(id => id !== user.id));
-                      }}
-                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
-                    />
-                    <span className="text-sm font-medium text-gray-700">{user.fullName}</span>
-                  </label>
-                ))}
-                {users.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych użytkowników</div>}
-              </div>
             </div>
           </div>
         </div>
