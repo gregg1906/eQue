@@ -34,6 +34,10 @@ export default function AdminDashboard() {
     setIsPopupOpen(false);
   };
 
+  const handleRowClick = (deviceId: string) => {
+    console.log("Przygotowane pod nawigację do urządzenia:", deviceId);
+  };
+
   return (
     <div className="relative">
       <div className="mb-6 flex items-center justify-between">
@@ -49,19 +53,28 @@ export default function AdminDashboard() {
       <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-gray-200">
         <ul className="divide-y divide-gray-100">
           {devices.map((device) => (
-            <li key={device.id} className="flex items-center justify-between p-4 transition-colors hover:bg-gray-50">
-              <div>
-                <p className="font-semibold text-gray-800">{device.name}</p>
-                <p className="text-sm text-gray-500">Lokalizacja: {device.location}</p>
-              </div>
-              <div className="flex space-x-2">
-                <button className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-200">
-                  Edytuj
-                </button>
-                <button className="rounded-md bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100">
-                  Usuń
-                </button>
-              </div>
+            <li key={device.id}>
+              <button 
+                onClick={() => handleRowClick(device.id)}
+                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
+              >
+                <div>
+                  <p className="font-semibold text-gray-800 transition-colors group-hover:text-[#1877f2]">
+                    {device.name}
+                  </p>
+                  <p className="text-sm text-gray-500">Lokalizacja: {device.location}</p>
+                </div>
+                <div>
+                  <svg 
+                    className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[#1877f2]" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </button>
             </li>
           ))}
           {devices.length === 0 && (
