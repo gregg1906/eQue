@@ -84,8 +84,11 @@ class _MyHomePageState extends State<MyHomePage> {
   String _numerBiletu = "";
   
   Timer? _odliczanie;
-  int _calkowityCzasWSekundach = 0; 
-  int _pozostalyCzasWSekundach = 0; 
+  final int _czasNaOsobeWSekundach = 15; 
+  int _czasObecnejOsobyWSekundach = 0;   
+  
+  int _osobyPrzedNami = 0; 
+  int _poczatkoweOsoby = 0; 
 
   @override
   void dispose() {
@@ -97,16 +100,25 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _wKolejce = true;
       _numerBiletu = wpisanyKod.toUpperCase(); 
-      _calkowityCzasWSekundach = 2*60;
-      _pozostalyCzasWSekundach = _calkowityCzasWSekundach;
+      _osobyPrzedNami = 3; 
+      _poczatkoweOsoby = _osobyPrzedNami;
+      _czasObecnejOsobyWSekundach = _czasNaOsobeWSekundach;
     });
 
     _odliczanie?.cancel();
 
     _odliczanie = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
-        if (_pozostalyCzasWSekundach > 0) {
-          _pozostalyCzasWSekundach--;
+        if (_osobyPrzedNami > 0) {
+          _czasObecnejOsobyWSekundach--; 
+          
+          if (_czasObecnejOsobyWSekundach <= 0) {
+            _osobyPrzedNami--; 
+            
+            if (_osobyPrzedNami > 0) {
+              _czasObecnejOsobyWSekundach = _czasNaOsobeWSekundach; 
+            }
+          }
         } else {
           timer.cancel(); 
         }
@@ -119,7 +131,8 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _wKolejce = false;
       _numerBiletu = "";
-      _pozostalyCzasWSekundach = 0;
+      _osobyPrzedNami = 0;
+      _czasObecnejOsobyWSekundach = 0;
     });
   }
 
@@ -133,16 +146,16 @@ class _MyHomePageState extends State<MyHomePage> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                Navigator.of(dialogContext).pop(); 
               },
               child: const Text('Zostaję'),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
+                backgroundColor: Colors.redAccent, 
               ),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                Navigator.of(dialogContext).pop(); 
                 _opuscKolejke();                   
               },
               child: const Text('Tak, rezygnuję'),
@@ -155,12 +168,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    int minuty = _pozostalyCzasWSekundach ~/ 60;
-    int sekundy = _pozostalyCzasWSekundach % 60;
+    int calkowityPozostalyCzas = 0;
+    if (_osobyPrzedNami > 0) {
+      calkowityPozostalyCzas = ((_osobyPrzedNami - 1) * _czasNaOsobeWSekundach) + _czasObecnejOsobyWSekundach;
+    }
+
+    int minuty = calkowityPozostalyCzas ~/ 60;
+    int sekundy = calkowityPozostalyCzas % 60;
     String tekstCzasu = "$minuty:${sekundy.toString().padLeft(2, '0')}";
 
-    double postep = _calkowityCzasWSekundach > 0 
-        ? _pozostalyCzasWSekundach / _calkowityCzasWSekundach 
+    double postep = _poczatkoweOsoby > 0 
+        ? calkowityPozostalyCzas / (_poczatkoweOsoby * _czasNaOsobeWSekundach) 
         : 0.0;
 
     return Scaffold(
@@ -197,6 +215,7 @@ class _MyHomePageState extends State<MyHomePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (!_wKolejce) ...[
+                  // --- WIDOK 1: BRAK KOLEJKI ---
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -229,6 +248,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   )
                 ] else ...[
+                  // --- WIDOK 2: WIRTUALNY BILET ---
                   const Text(
                     'Twój numer biletowy:',
                     style: TextStyle(fontSize: 14, color: Colors.black54),
@@ -244,61 +264,116 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   const Divider(height: 40, thickness: 1),
                   
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('STANOWISKO', style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      const Text('Okienko 3 (Rejestracja)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-                      
-                      const SizedBox(height: 24),
-                      
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  if (_osobyPrzedNami > 0) ...[
+                    // --- GDY JEST KOLEJKA ---
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('STANOWISKO', style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        const Text('Okienko 3 (Rejestracja)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('OSOBY PRZED TOBĄ', style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.people, size: 20, color: Colors.black87),
+                                    const SizedBox(width: 6),
+                                    Text('$_osobyPrzedNami', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.black87)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text('SZAC. CZAS', style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Text(tekstCzasu, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF1877F2))),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: postep, end: postep), 
+                          duration: const Duration(milliseconds: 500), 
+                          builder: (context, value, child) {
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: value,
+                                minHeight: 12, 
+                                backgroundColor: Colors.grey.shade200, 
+                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1877F2)), 
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    // --- GDY TWOJA KOLEJ ---
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.shade400, width: 2), 
+                      ),
+                      child: Column(
                         children: [
-                          Text(
-                            _pozostalyCzasWSekundach > 0 ? 'Pozostały czas' : 'Status kolejki', 
-                            style: const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold)
+                          const Icon(Icons.check_circle, color: Colors.green, size: 64),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'TWOJA KOLEJ!', 
+                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.green)
                           ),
-                          Text(
-                            _pozostalyCzasWSekundach > 0 ? tekstCzasu : 'Zaraz Twoja kolej!', 
-                            style: TextStyle(
-                              fontSize: 14, 
-                              fontWeight: FontWeight.w900, 
-                              color: _pozostalyCzasWSekundach > 0 ? const Color(0xFF1877F2) : Colors.green,
-                            )
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Podejdź do punktu obsługi\n(Okienko 3)', 
+                            textAlign: TextAlign.center, 
+                            style: TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: postep, end: postep), 
-                        duration: const Duration(milliseconds: 500), 
-                        builder: (context, value, child) {
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: value,
-                              minHeight: 12, 
-                              backgroundColor: Colors.grey.shade200, 
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                _pozostalyCzasWSekundach > 0 ? const Color(0xFF1877F2) : Colors.green
-                              ), 
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                   
                   const SizedBox(height: 32),
                   
-                  TextButton.icon(
-                    onPressed: () => _potwierdzOpuszczenieKolejki(context),
-                    icon: const Icon(Icons.exit_to_app, color: Colors.redAccent),
-                    label: const Text('Zrezygnuj z kolejki', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                  )
+                  // ===============================================
+                  // ZMIENIONA CZĘŚĆ: Przycisk na dole dostosowany do statusu
+                  // ===============================================
+                  if (_osobyPrzedNami > 0)
+                    TextButton.icon(
+                      onPressed: () => _potwierdzOpuszczenieKolejki(context),
+                      icon: const Icon(Icons.exit_to_app, color: Colors.redAccent),
+                      label: const Text('Zrezygnuj z kolejki', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity, // Przycisk na pełną szerokość
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green, // Dostosowany do zielonego motywu
+                        ),
+                        onPressed: () {
+                          // Kliknięcie po prostu zamyka/odświeża widok (tak jakby pacjent poszedł do domu)
+                          _opuscKolejke();
+                        },
+                        child: const Text('Zakończ wizytę', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    )
                 ]
               ],
             ),
@@ -309,6 +384,9 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
+// ============================================================
+// NASZE WŁASNE OKIENKO ZE SKANEREM
+// ============================================================
 class SkanerDialog extends StatefulWidget {
   final CameraDescription camera;
   final Function(String) onKodZeskanowany; 
