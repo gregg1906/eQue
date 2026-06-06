@@ -2,10 +2,23 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+  
+  // POPRAWKA: Używamy parametru nazwanego "settings:"
+  await flutterLocalNotificationsPlugin.initialize(
+    settings: initializationSettings,
+  );
+
   final cameras = await availableCameras();
   final firstCamera = cameras.first;
 
@@ -91,9 +104,47 @@ class _MyHomePageState extends State<MyHomePage> {
   int _poczatkoweOsoby = 0; 
 
   @override
+  void initState() {
+    super.initState();
+    flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+  }
+
+  @override
   void dispose() {
     _odliczanie?.cancel();
     super.dispose();
+  }
+
+  Future<void> _pokazPowiadomienie(int ileOsobZostalo) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+      'eque_kolejka_kanal', 
+      'Powiadomienia o kolejce', 
+      channelDescription: 'Informuje, gdy kolejka przesuwa się do przodu',
+      importance: Importance.max, 
+      priority: Priority.high,
+      color: Color(0xFF1877F2), 
+    );
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    if (ileOsobZostalo > 0) {
+      // POPRAWKA: Używamy nazwanych parametrów (id:, title:, body:, notificationDetails:)
+      await flutterLocalNotificationsPlugin.show(
+        id: 0, 
+        title: 'Kolejka posuwa się do przodu!', 
+        body: 'Osoba przed Tobą została obsłużona. Zostało osób: $ileOsobZostalo.', 
+        notificationDetails: platformChannelSpecifics,
+      );
+    } else {
+      // POPRAWKA: j.w.
+      await flutterLocalNotificationsPlugin.show(
+        id: 1, 
+        title: '🔔 ZARAZ TWOJA KOLEJ!', 
+        body: 'Podejdź do wyznaczonego stanowiska (Okienko 3).', 
+        notificationDetails: platformChannelSpecifics,
+      );
+    }
   }
 
   void _dolaczDoKolejki(String wpisanyKod) {
@@ -117,6 +168,9 @@ class _MyHomePageState extends State<MyHomePage> {
             
             if (_osobyPrzedNami > 0) {
               _czasObecnejOsobyWSekundach = _czasNaOsobeWSekundach; 
+              _pokazPowiadomienie(_osobyPrzedNami);
+            } else {
+              _pokazPowiadomienie(0);
             }
           }
         } else {
@@ -128,6 +182,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _opuscKolejke() {
     _odliczanie?.cancel(); 
+    flutterLocalNotificationsPlugin.cancelAll(); 
+    
     setState(() {
       _wKolejce = false;
       _numerBiletu = "";
@@ -215,7 +271,6 @@ class _MyHomePageState extends State<MyHomePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (!_wKolejce) ...[
-                  // --- WIDOK 1: BRAK KOLEJKI ---
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -248,7 +303,6 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   )
                 ] else ...[
-                  // --- WIDOK 2: WIRTUALNY BILET ---
                   const Text(
                     'Twój numer biletowy:',
                     style: TextStyle(fontSize: 14, color: Colors.black54),
@@ -265,7 +319,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   const Divider(height: 40, thickness: 1),
                   
                   if (_osobyPrzedNami > 0) ...[
-                    // --- GDY JEST KOLEJKA ---
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -321,7 +374,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       ],
                     ),
                   ] else ...[
-                    // --- GDY TWOJA KOLEJ ---
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -351,9 +403,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   
                   const SizedBox(height: 32),
                   
-                  // ===============================================
-                  // ZMIENIONA CZĘŚĆ: Przycisk na dole dostosowany do statusu
-                  // ===============================================
                   if (_osobyPrzedNami > 0)
                     TextButton.icon(
                       onPressed: () => _potwierdzOpuszczenieKolejki(context),
@@ -362,13 +411,12 @@ class _MyHomePageState extends State<MyHomePage> {
                     )
                   else
                     SizedBox(
-                      width: double.infinity, // Przycisk na pełną szerokość
+                      width: double.infinity,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green, // Dostosowany do zielonego motywu
+                          backgroundColor: Colors.green, 
                         ),
                         onPressed: () {
-                          // Kliknięcie po prostu zamyka/odświeża widok (tak jakby pacjent poszedł do domu)
                           _opuscKolejke();
                         },
                         child: const Text('Zakończ wizytę', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
