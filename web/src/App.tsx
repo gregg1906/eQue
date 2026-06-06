@@ -6,18 +6,28 @@ import Sidebar from './components/Sidebar';
 type Role = 'admin' | 'user' | null;
 
 export default function App() {
-  const [role, setRole] = useState<Role>(null);
-  const [userName, setUserName] = useState<string>('');
+  const [role, setRole] = useState<Role>(() => {
+    return (localStorage.getItem('eque_role') as Role) || null;
+  });
+  
+  const [userName, setUserName] = useState<string>(() => {
+    return localStorage.getItem('eque_userName') || '';
+  });
+  
   const [activeTab, setActiveTab] = useState<string>('strona_glowna');
 
-  const handleLoginSuccess = (loggedRole: Role, loggedName: string) => {
+  const handleLoginSuccess = (loggedRole: 'admin' | 'user', loggedName: string) => {
     setRole(loggedRole);
     setUserName(loggedName);
+    localStorage.setItem('eque_role', loggedRole);
+    localStorage.setItem('eque_userName', loggedName);
   };
 
   const handleLogout = () => {
     setRole(null);
     setUserName('');
+    localStorage.removeItem('eque_role');
+    localStorage.removeItem('eque_userName');
   };
 
   if (!role) {

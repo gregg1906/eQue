@@ -7,11 +7,17 @@ interface Device {
 }
 
 export default function AdminDashboard() {
-  const [devices, setDevices] = useState<Device[]>([
-    { id: '1', name: 'Tablet Wejściowy', location: 'Hol Główny' },
-    { id: '2', name: 'Tablet Rejestracja', location: 'Okienko 1' },
-    { id: '3', name: 'Kiosk Kardiologia', location: 'Piętro 2' },
-  ]);
+  const [devices, setDevices] = useState<Device[]>(() => {
+    const savedDevices = localStorage.getItem('eque_devices');
+    if (savedDevices) {
+      return JSON.parse(savedDevices);
+    }
+    return [
+      { id: '1', name: 'Tablet Wejściowy', location: 'Hol Główny' },
+      { id: '2', name: 'Tablet Rejestracja', location: 'Okienko 1' },
+      { id: '3', name: 'Kiosk Kardiologia', location: 'Piętro 2' },
+    ];
+  });
   
   const [isPopupOpen, setIsPopupOpen] = useState(false);
 
@@ -22,7 +28,9 @@ export default function AdminDashboard() {
       location: 'Nieprzypisany',
     };
     
-    setDevices([...devices, newDevice]);
+    const updatedDevices = [...devices, newDevice];
+    setDevices(updatedDevices);
+    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
     setIsPopupOpen(false);
   };
 
