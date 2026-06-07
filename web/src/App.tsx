@@ -1,23 +1,38 @@
 import { useState } from 'react';
 import LoginForm from './components/LoginForm';
 import AdminDashboard from './components/AdminDashboard';
+import AdminLocations from './components/AdminLocations';
+import AdminUsers from './components/AdminUsers';
 import Sidebar from './components/Sidebar';
+import UserSidebar from './components/UserSidebar';
+import UserQueue from './components/UserQueue';
 
 type Role = 'admin' | 'user' | null;
 
 export default function App() {
-  const [role, setRole] = useState<Role>(null);
-  const [userName, setUserName] = useState<string>('');
+  const [role, setRole] = useState<Role>(() => {
+    return (localStorage.getItem('eque_role') as Role) || null;
+  });
+  
+  const [userName, setUserName] = useState<string>(() => {
+    return localStorage.getItem('eque_userName') || '';
+  });
+  
   const [activeTab, setActiveTab] = useState<string>('strona_glowna');
 
-  const handleLoginSuccess = (loggedRole: Role, loggedName: string) => {
+  const handleLoginSuccess = (loggedRole: 'admin' | 'user', loggedName: string) => {
     setRole(loggedRole);
     setUserName(loggedName);
+    setActiveTab('strona_glowna');
+    localStorage.setItem('eque_role', loggedRole);
+    localStorage.setItem('eque_userName', loggedName);
   };
 
   const handleLogout = () => {
     setRole(null);
     setUserName('');
+    localStorage.removeItem('eque_role');
+    localStorage.removeItem('eque_userName');
   };
 
   if (!role) {
@@ -43,6 +58,9 @@ export default function App() {
         {role === 'admin' && (
           <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
         )}
+        {role === 'user' && (
+          <UserSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+        )}
 
         <main className="flex-1 overflow-y-auto px-4 py-8">
           <div className="mx-auto w-full max-w-5xl">
@@ -54,28 +72,23 @@ export default function App() {
               ) : activeTab === 'tablety' ? (
                 <AdminDashboard />
               ) : activeTab === 'lokalizacje' ? (
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
-                  <p className="text-gray-500">Moduł lokalizacji (w przygotowaniu)</p>
-                </div>
+                <AdminLocations />
               ) : activeTab === 'uzytkownicy' ? (
-                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
-                  <p className="text-gray-500">Moduł użytkowników (w przygotowaniu)</p>
-                </div>
+                <AdminUsers />
               ) : (
                 <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
                   <p className="text-gray-500">Pusta zakładka</p>
                 </div>
               )
-            ) : (
-              <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
-                <h2 className="mb-4 text-xl font-bold text-gray-800">
-                  Panel Personelu (Użytkownika)
-                </h2>
-                <p className="text-gray-600">
-                  Zalogowano pomyślnie. Wkrótce dodamy tutaj podgląd i zarządzanie kolejką pacjentów.
-                </p>
-              </div>
-            )}
+            ) : role === 'user' ? (
+              activeTab === 'kolejka' ? (
+                <UserQueue userName={userName} />
+              ) : (
+                <div className="rounded-xl bg-white p-6 shadow-sm border border-gray-200">
+                  <p className="text-gray-500">Strona główna (w przygotowaniu)</p>
+                </div>
+              )
+            ) : null}
           </div>
         </main>
       </div>

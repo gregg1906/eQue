@@ -6,7 +6,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <aside className={`${isCollapsed ? 'w-20' : 'w-64'} flex flex-col flex-shrink-0 border-r border-gray-200 bg-white shadow-sm z-10 transition-all duration-300 overflow-hidden`}>

@@ -15,8 +15,15 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
 
     if (username === 'admin' && password === 'admin123') {
       onLoginSuccess('admin', 'Administrator');
-    } else if (username === 'user' && password === 'user123') {
-      onLoginSuccess('user', 'Personel');
+      return;
+    }
+
+    const savedUsers = localStorage.getItem('eque_users');
+    const users: { fullName: string; password: string }[] = savedUsers ? JSON.parse(savedUsers) : [];
+    const match = users.find(u => u.fullName === username && u.password === password && u.password);
+
+    if (match) {
+      onLoginSuccess('user', match.fullName);
     } else {
       setError('Nieprawidłowy login lub hasło.');
     }
@@ -40,7 +47,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             <form onSubmit={handleLogin} className="flex flex-col space-y-4">
               <input
                 type="text"
-                placeholder="Nazwa użytkownika (np. admin lub user)"
+                placeholder="Nazwa użytkownika (admin)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="rounded-md border border-gray-300 p-3.5 text-lg outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
@@ -48,7 +55,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
               />
               <input
                 type="password"
-                placeholder="Hasło (np. admin123 lub user123)"
+                placeholder="Hasło (admin123)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="rounded-md border border-gray-300 p-3.5 text-lg outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
