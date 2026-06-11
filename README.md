@@ -30,7 +30,32 @@ Cache - Redis
    ```bash
    docker-compose up -d
 
-## 3. Uruchomienie Backendu
+## 3. Uruchomienie Web (React + Vite)
+
+Frontend działa w całości przez Docker — nie wymaga instalacji Node.js ani `npm install`.
+
+### Pierwsze uruchomienie / po zmianie `package.json`:
+```bash
+docker-compose up --build web
+```
+
+### Każde kolejne uruchomienie:
+```bash
+docker-compose up web
+```
+
+### Zatrzymanie:
+```bash
+docker-compose down
+```
+
+Aplikacja dostępna pod: http://localhost:5173
+
+> Hot reload działa automatycznie — zmiany w kodzie odświeżają się bez restartu kontenera.
+
+---
+
+## 4. Uruchomienie Backendu
 
 ### Uruchomienie lokalne (temp, docelowo osobny kontener):
 
