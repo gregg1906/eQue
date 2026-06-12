@@ -11,7 +11,7 @@ Aby poprawnie uruchomić projekt potrzebujemy:
 * Środowiska Docker.
 * Systemu operacyjnego Windows z WSL2
 * Python w wersji 3.10 lub wyższej.
-* Node.js (dla frontendu) oraz środowiska Flutter (dla mobile)
+* Node.js (dla frontendu) oraz środowiska Flutter (dla mobile).
 
 ---
 
@@ -23,35 +23,28 @@ DB - PostgreSQL
 
 Cache - Redis
 
-# Uruchomienie środowiska
-1. Uruchom aplikację Docker Desktop.
-2. Otwórz terminal w głównym folderze projektu.
-3. Wpisz komendę:
-   ```bash
-   docker-compose up -d
+---
 
-## 3. Uruchomienie Web (React + Vite)
+## 3. Uruchomienie Środowiska (DB, Cache, Web)
 
-Frontend działa w całości przez Docker — nie wymaga instalacji Node.js ani `npm install`.
+Cała infrastruktura bazodanowa, Redis oraz aplikacja frontendowa (React) są zintegrowane w jednym pliku Docker Compose. Aplikacja frontendowa działa w trybie Hot Reload — zmiany w kodzie odświeżają się automatycznie.
 
-### Pierwsze uruchomienie / po zmianie `package.json`:
+### Pierwsze uruchomienie (zbudowanie obrazów m.in. dla Web):
 ```bash
-docker-compose up --build web
+docker-compose up -d --build
 ```
 
 ### Każde kolejne uruchomienie:
 ```bash
-docker-compose up web
+docker-compose up -d
 ```
 
-### Zatrzymanie:
+### Zatrzymanie środowiska:
 ```bash
 docker-compose down
 ```
 
-Aplikacja dostępna pod: http://localhost:5173
-
-> Hot reload działa automatycznie — zmiany w kodzie odświeżają się bez restartu kontenera.
+Aplikacja Web jest dostępna pod adresem: http://localhost:5173
 
 ---
 
@@ -59,7 +52,7 @@ Aplikacja dostępna pod: http://localhost:5173
 
 ### Uruchomienie lokalne (temp, docelowo osobny kontener):
 
-1. Otwórz terminal w folderze backend
+1. Otwórz terminal w folderze `backend`.
 2. Zainstaluj wymagane biblioteki:
 ```bash 
 pip install -r requirements.txt
@@ -70,3 +63,32 @@ python -m uvicorn main:app --reload
 ```
 Serwer zostanie uruchomiony na adresie: http://127.0.0.1:8000
 Dokumentacja API (Swagger): http://127.0.0.1:8000/docs
+
+---
+
+## 5. Inicjalizacja Bazy Danych (Migracje i Seeding)
+
+Aby serwer backendowy mógł prawidłowo funkcjonować, musi posiadać strukturę tabel w bazie oraz dane testowe (konta, stanowiska, pacjenci). 
+
+Upewnij się, że kontenery Dockera (w tym baza danych) są uruchomione (Krok 3), a następnie wykonaj w terminalu w folderze `backend`:
+
+1. **Utworzenie struktury tabel (Alembic):**
+```bash
+alembic upgrade head
+```
+2. **Seeding bazy danych:**
+```bash
+python seed.py
+```
+
+**Konto Superadmina (dostęp do panelu):**
+* **Login:** `admin`
+* **Hasło:** `admin123` *(Zapisane w bazie w formie kryptograficznego hasha bcrypt).*
+
+---
+
+## 6. Autoryzacja i Standardy API
+
+* **Zabezpieczenie JWT (JSON Web Tokens):** Endpointy dla panelu administratora (np. zarządzanie tabletami) są chronione. W celu ich użycia, frontend musi najpierw uderzyć na endpoint `POST /api/v1/auth/login` podając dane dostępowe. W odpowiedzi otrzyma token JWT.
+* **Autoryzacja:** Otrzymany token należy dołączać do nagłówka każdego chronionego zapytania w formacie: `Authorization: Bearer <twój_wygenerowany_token>`.
+* **Dokumentacja kontraktów:** Po uruchomieniu serwera (Krok 4), wszystkie dostępne endpointy, metody (CRUD) oraz wymagane schematy (modele zapytań i odpowiedzi) są samoczynnie dokumentowane i dostępne do podglądu pod adresem `/docs`.
