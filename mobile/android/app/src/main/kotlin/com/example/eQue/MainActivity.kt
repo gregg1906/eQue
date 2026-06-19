@@ -1,4 +1,4 @@
-package com.example.your_turn
+package com.example.eque
 
 import io.flutter.embedding.android.FlutterActivity
 
