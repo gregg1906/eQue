@@ -42,7 +42,7 @@ class HomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Zarządzaj swoim czasem i unikaj kolejek w placówkach medycznych w prosty sposób.',
+                'Zarządzaj swoim czasem i unikaj kolejek w prosty sposób.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15, color: Colors.black54),
               ),
