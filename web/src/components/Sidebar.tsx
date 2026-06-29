@@ -1,91 +1,92 @@
-import { useState } from 'react';
-
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
 
+const NAV = [
+  {
+    key: 'strona_glowna',
+    label: 'Strona główna',
+    icon: (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'tablety',
+    label: 'Tablety',
+    icon: (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'lokalizacje',
+    label: 'Lokalizacje',
+    icon: (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2a7 7 0 017 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'uzytkownicy',
+    label: 'Użytkownicy',
+    icon: (
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+      </svg>
+    ),
+  },
+];
+
 export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
   return (
-    <aside className={`${isCollapsed ? 'w-20' : 'w-64'} flex flex-col flex-shrink-0 border-r border-gray-200 bg-white shadow-sm z-10 transition-all duration-300 overflow-hidden`}>
-      <div className="flex h-14 items-center px-6 border-b border-gray-100">
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
-        >
-          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            {isCollapsed ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M6 5l7 7-7 7" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M18 19l-7-7 7-7" />
-            )}
-          </svg>
-        </button>
-      </div>
-      
-      <nav className="flex-1 py-4">
-        <button
-          onClick={() => setActiveTab('strona_glowna')}
-          title={isCollapsed ? "Strona główna" : ""}
-          className={`flex w-full items-center px-6 py-3 space-x-4 transition-colors ${
-            activeTab === 'strona_glowna' 
-              ? 'bg-blue-50 border-l-4 border-[#1877f2] text-[#1877f2]' 
-              : 'border-l-4 border-transparent text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-          }`}
-        >
-          <svg className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          {!isCollapsed && <span className="font-semibold whitespace-nowrap">Strona główna</span>}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('tablety')}
-          title={isCollapsed ? "Tablety" : ""}
-          className={`flex w-full items-center px-6 py-3 space-x-4 transition-colors ${
-            activeTab === 'tablety' 
-              ? 'bg-blue-50 border-l-4 border-[#1877f2] text-[#1877f2]' 
-              : 'border-l-4 border-transparent text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-          }`}
-        >
-          <svg className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </svg>
-          {!isCollapsed && <span className="font-semibold whitespace-nowrap">Tablety</span>}
-        </button>
-        
-        <button
-          onClick={() => setActiveTab('lokalizacje')}
-          title={isCollapsed ? "Lokalizacje" : ""}
-          className={`flex w-full items-center px-6 py-3 space-x-4 transition-colors ${
-            activeTab === 'lokalizacje' 
-              ? 'bg-blue-50 border-l-4 border-[#1877f2] text-[#1877f2]' 
-              : 'border-l-4 border-transparent text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-          }`}
-        >
-          <svg className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          {!isCollapsed && <span className="font-semibold whitespace-nowrap">Lokalizacje</span>}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('uzytkownicy')}
-          title={isCollapsed ? "Użytkownicy" : ""}
-          className={`flex w-full items-center px-6 py-3 space-x-4 transition-colors ${
-            activeTab === 'uzytkownicy' 
-              ? 'bg-blue-50 border-l-4 border-[#1877f2] text-[#1877f2]' 
-              : 'border-l-4 border-transparent text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-          }`}
-        >
-          <svg className="h-6 w-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          {!isCollapsed && <span className="font-semibold whitespace-nowrap">Użytkownicy</span>}
-        </button>
+    <aside style={{
+      width: 232,
+      flexShrink: 0,
+      background: 'var(--surface-card)',
+      borderRight: '1px solid var(--border-subtle)',
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '16px 12px',
+    }}>
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {NAV.map((item) => {
+          const active = activeTab === item.key;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setActiveTab(item.key)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+                padding: '10px 12px',
+                border: 'none',
+                cursor: 'pointer',
+                borderRadius: 'var(--radius-md)',
+                textAlign: 'left',
+                width: '100%',
+                background: active ? 'var(--brand-subtle)' : 'transparent',
+                color: active ? 'var(--text-brand)' : 'var(--text-body)',
+                fontFamily: 'var(--font-ui)',
+                fontSize: 14.5,
+                fontWeight: active ? 700 : 600,
+                transition: `background var(--dur-fast) var(--ease-out)`,
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--surface-sunken)'; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          );
+        })}
       </nav>
     </aside>
   );

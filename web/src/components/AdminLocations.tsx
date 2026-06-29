@@ -155,7 +155,7 @@ export default function AdminLocations() {
                 type="text"
                 value={editingLocation.name}
                 onChange={(e) => setEditingLocation({ ...editingLocation, name: e.target.value })}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -164,7 +164,7 @@ export default function AdminLocations() {
                 value={editingLocation.description}
                 onChange={(e) => setEditingLocation({ ...editingLocation, description: e.target.value })}
                 rows={3}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -181,7 +181,7 @@ export default function AdminLocations() {
                           : editingLocation.userIds.filter(id => id !== user.id);
                         setEditingLocation({ ...editingLocation, userIds: newUserIds });
                       }}
-                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
+                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[var(--text-brand)] focus:ring-[#1877f2]"
                     />
                     <span className="text-sm font-medium text-gray-700">{user.fullName}</span>
                   </label>
@@ -203,7 +203,7 @@ export default function AdminLocations() {
                           : editingLocationDeviceIds.filter(id => id !== device.id)
                         );
                       }}
-                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
+                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[var(--text-brand)] focus:ring-[#1877f2]"
                     />
                     <span className="text-sm font-medium text-gray-700">
                       {device.name || <span className="italic text-gray-400">Tablet bez nazwy</span>}
@@ -231,7 +231,7 @@ export default function AdminLocations() {
               </button>
               <button
                 onClick={handleSaveEdit}
-                className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+                className="rounded-md bg-[var(--brand)] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
               >
                 Zapisz zmiany
               </button>
@@ -248,7 +248,7 @@ export default function AdminLocations() {
         <h2 className="text-2xl font-bold text-gray-800">Zarządzanie lokalizacjami</h2>
         <button
           onClick={() => setIsSidePanelOpen(true)}
-          className="rounded-md bg-[#1877f2] px-4 py-2 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+          className="rounded-md bg-[var(--brand)] px-4 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
         >
           + Dodaj lokalizację
         </button>
@@ -260,10 +260,10 @@ export default function AdminLocations() {
             <li key={location.id}>
               <button
                 onClick={() => openEditLocation(location)}
-                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
+                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-[var(--brand-subtle)]"
               >
                 <div>
-                  <p className="font-semibold text-gray-800 transition-colors group-hover:text-[#1877f2]">
+                  <p className="font-semibold text-gray-800 transition-colors group-hover:text-[var(--text-brand)]">
                     {location.name}
                   </p>
                   <p className="text-sm text-gray-500">
@@ -271,7 +271,7 @@ export default function AdminLocations() {
                   </p>
                 </div>
                 <div>
-                  <svg className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[#1877f2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[var(--text-brand)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
@@ -314,7 +314,7 @@ export default function AdminLocations() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="np. Gabinet 12"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -324,7 +324,7 @@ export default function AdminLocations() {
                 onChange={(e) => setNewDescription(e.target.value)}
                 placeholder="np. Piętro 1, skrzydło wschodnie"
                 rows={3}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
           </div>
@@ -334,7 +334,7 @@ export default function AdminLocations() {
           <button onClick={() => setIsSidePanelOpen(false)} className="rounded-md bg-white border border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-50">
             Anuluj
           </button>
-          <button onClick={handleAddLocation} className="rounded-md bg-[#1877f2] px-6 py-2 font-semibold text-white transition-colors hover:bg-[#166fe5]">
+          <button onClick={handleAddLocation} className="rounded-md bg-[var(--brand)] px-6 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]">
             Dodaj
           </button>
         </div>

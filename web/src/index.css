@@ -1,1 +1,72 @@
 @import "tailwindcss";
+
+:root {
+  /* Brand: teal */
+  --teal-50:  #ECFDFA;
+  --teal-100: #CFF8F1;
+  --teal-200: #9CEEE2;
+  --teal-400: #25C7B7;
+  --teal-500: #0FB5AB;
+  --teal-600: #0E9B92;
+  --teal-700: #0C7B74;
+
+  /* Neutral: slate */
+  --slate-0:   #FFFFFF;
+  --slate-50:  #F6F8F9;
+  --slate-100: #EDF1F3;
+  --slate-200: #DDE4E8;
+  --slate-300: #C4CED4;
+  --slate-400: #94A3AC;
+  --slate-500: #677782;
+  --slate-600: #4C5961;
+  --slate-700: #364148;
+  --slate-800: #232B30;
+  --slate-900: #151B1F;
+
+  /* Semantic */
+  --brand:          var(--teal-500);
+  --brand-hover:    var(--teal-600);
+  --brand-active:   var(--teal-700);
+  --brand-subtle:   var(--teal-50);
+  --brand-subtle-2: var(--teal-100);
+  --brand-border:   var(--teal-200);
+  --on-brand:       #FFFFFF;
+
+  --surface-page:    var(--slate-50);
+  --surface-card:    #FFFFFF;
+  --surface-sunken:  var(--slate-100);
+
+  --text-strong: var(--slate-900);
+  --text-body:   var(--slate-700);
+  --text-muted:  var(--slate-500);
+  --text-faint:  var(--slate-400);
+  --text-brand:  var(--teal-700);
+
+  --border-subtle:  var(--slate-200);
+  --border-default: var(--slate-300);
+  --focus-ring:     var(--teal-400);
+
+  /* Fonts */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-ui:      "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(21,27,31,0.06), 0 1px 3px rgba(21,27,31,0.08);
+  --shadow-md: 0 2px 4px rgba(21,27,31,0.05), 0 6px 16px rgba(21,27,31,0.08);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+}
+
+body {
+  font-family: var(--font-ui);
+  background: var(--surface-page);
+  color: var(--text-body);
+}

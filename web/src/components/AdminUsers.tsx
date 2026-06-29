@@ -123,7 +123,7 @@ export default function AdminUsers() {
 
         <div className="rounded-xl bg-white p-8 shadow-sm border border-gray-200">
           <div className="mb-6 flex items-center space-x-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-[#1877f2]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-subtle-2)] text-xl font-bold text-[var(--text-brand)]">
               {getInitials(editingUser.fullName)}
             </div>
             <h2 className="text-2xl font-bold text-gray-800">Edycja pracownika</h2>
@@ -136,7 +136,7 @@ export default function AdminUsers() {
                 type="text"
                 value={editingUser.fullName}
                 onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -146,7 +146,7 @@ export default function AdminUsers() {
                 value={editingUser.password ?? ''}
                 onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
                 placeholder="Zostaw puste aby nie zmieniać"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -155,7 +155,7 @@ export default function AdminUsers() {
                 type="text"
                 value={editingUser.role}
                 onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -172,7 +172,7 @@ export default function AdminUsers() {
                           : editingUser.locationIds.filter(id => id !== loc.id);
                         setEditingUser({ ...editingUser, locationIds: newLocationIds });
                       }}
-                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[#1877f2] focus:ring-[#1877f2]"
+                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[var(--text-brand)] focus:ring-[#1877f2]"
                     />
                     <span className="text-sm font-medium text-gray-700">{loc.name}</span>
                   </label>
@@ -198,7 +198,7 @@ export default function AdminUsers() {
               </button>
               <button
                 onClick={handleSaveEdit}
-                className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+                className="rounded-md bg-[var(--brand)] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
               >
                 Zapisz zmiany
               </button>
@@ -215,7 +215,7 @@ export default function AdminUsers() {
         <h2 className="text-2xl font-bold text-gray-800">Zarządzanie personelem</h2>
         <button
           onClick={() => setIsSidePanelOpen(true)}
-          className="rounded-md bg-[#1877f2] px-4 py-2 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+          className="rounded-md bg-[var(--brand)] px-4 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
         >
           + Dodaj pracownika
         </button>
@@ -227,14 +227,14 @@ export default function AdminUsers() {
             <li key={user.id}>
               <button 
                 onClick={() => setEditingUser(user)}
-                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
+                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-[var(--brand-subtle)]"
               >
                 <div className="flex items-center space-x-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-gray-600 font-bold group-hover:bg-blue-200 group-hover:text-[#1877f2] transition-colors">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--surface-sunken)] text-[var(--text-muted)] font-bold group-hover:bg-[var(--brand-subtle-2)] group-hover:text-[var(--text-brand)] transition-colors">
                     {getInitials(user.fullName)}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-800 transition-colors group-hover:text-[#1877f2]">
+                    <p className="font-semibold text-gray-800 transition-colors group-hover:text-[var(--text-brand)]">
                       {user.fullName}
                     </p>
                     <p className="text-sm text-gray-500">
@@ -243,7 +243,7 @@ export default function AdminUsers() {
                   </div>
                 </div>
                 <div>
-                  <svg className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[#1877f2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[var(--text-brand)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
@@ -286,7 +286,7 @@ export default function AdminUsers() {
                 value={newFullName}
                 onChange={(e) => setNewFullName(e.target.value)}
                 placeholder="np. Anna Nowak"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -296,7 +296,7 @@ export default function AdminUsers() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Hasło do logowania"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
             <div>
@@ -306,7 +306,7 @@ export default function AdminUsers() {
                 value={newUserRole}
                 onChange={(e) => setNewUserRole(e.target.value)}
                 placeholder="np. Recepcjonistka"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
+                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
               />
             </div>
           </div>
@@ -316,7 +316,7 @@ export default function AdminUsers() {
           <button onClick={() => setIsSidePanelOpen(false)} className="rounded-md bg-white border border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-50">
             Anuluj
           </button>
-          <button onClick={handleAddUser} className="rounded-md bg-[#1877f2] px-6 py-2 font-semibold text-white transition-colors hover:bg-[#166fe5]">
+          <button onClick={handleAddUser} className="rounded-md bg-[var(--brand)] px-6 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]">
             Dodaj
           </button>
         </div>
