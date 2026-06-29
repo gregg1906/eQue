@@ -59,7 +59,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         </div>
 
         <div style={{ width: '100%', maxWidth: 420, margin: '0 auto' }}>
-          <div className="lg:hidden" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, justifyContent: 'center' }}>
             <img src="/logo-mark.svg" width="40" height="40" alt="eQue" />
             <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 28, letterSpacing: '-0.02em', color: 'var(--text-strong)' }}>
               eQue
@@ -81,7 +81,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
                 </label>
                 <input
                   type="text"
-                  placeholder="np. admin"
+                  placeholder="admin"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
@@ -107,7 +107,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
                 </label>
                 <input
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="admin123"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
