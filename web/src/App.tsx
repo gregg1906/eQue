@@ -9,6 +9,15 @@ import UserQueue from './components/UserQueue';
 
 type Role = 'admin' | 'user' | null;
 
+const TAB_META: Record<string, { title: string; action: string | null }> = {
+  strona_glowna: { title: 'Pulpit',      action: null },
+  tablety:       { title: 'Tablety',     action: 'Dodaj urządzenie' },
+  lokalizacje:   { title: 'Lokalizacje', action: 'Dodaj lokalizację' },
+  uzytkownicy:   { title: 'Użytkownicy', action: 'Dodaj użytkownika' },
+  kolejka:       { title: 'Kolejka',     action: null },
+};
+
+
 export default function App() {
   const [role, setRole] = useState<Role>(() => {
     return (localStorage.getItem('eque_role') as Role) || null;
@@ -19,6 +28,7 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<string>('strona_glowna');
+  const [addOpen, setAddOpen] = useState(false);
 
   const handleLoginSuccess = (loggedRole: 'admin' | 'user', loggedName: string) => {
     setRole(loggedRole);
@@ -40,115 +50,85 @@ export default function App() {
     return <LoginForm onLoginSuccess={handleLoginSuccess} />;
   }
 
-  const initials = userName
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map(w => w.charAt(0).toUpperCase())
-    .join('');
+  const meta = TAB_META[activeTab] ?? { title: activeTab, action: null };
+
+  const placeholder = (text: string) => (
+    <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', padding: 32, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)' }}>
+      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 16, margin: 0 }}>{text}</p>
+    </div>
+  );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column', background: 'var(--surface-page)' }}>
-      <nav style={{
-        display: 'flex', height: 56, flexShrink: 0, alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'var(--surface-card)',
-        padding: '0 24px',
-        zIndex: 20,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/logo-mark.svg" width="28" height="28" alt="" />
-          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, letterSpacing: '-0.01em', color: 'var(--text-strong)' }}>
-            eQue
-          </span>
-        </div>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--surface-page)' }}>
+      {role === 'admin' && (
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={tab => { setActiveTab(tab); setAddOpen(false); }}
+          userName={userName}
+          userRole="admin"
+          onLogout={handleLogout}
+        />
+      )}
+      {role === 'user' && (
+        <UserSidebar
+          activeTab={activeTab}
+          setActiveTab={tab => { setActiveTab(tab); setAddOpen(false); }}
+          userName={userName}
+          onLogout={handleLogout}
+        />
+      )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'var(--brand-subtle-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 12,
-              color: 'var(--text-brand)', flexShrink: 0,
-            }}>
-              {initials}
-            </div>
-            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14, color: 'var(--text-body)' }}>
-              {userName}
-            </span>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        {/* Sticky page header */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 20,
+          background: 'var(--surface-card)',
+          borderBottom: '1px solid var(--border-subtle)',
+          padding: '22px 48px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 30,
+            color: 'var(--text-strong)', margin: 0, letterSpacing: '-0.02em',
+          }}>
+            {meta.title}
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {meta.action && (
+              <button
+                onClick={() => setAddOpen(true)}
+                style={{
+                  background: 'var(--brand)', color: '#fff', border: 'none',
+                  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+                  fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15,
+                  cursor: 'pointer', transition: 'background var(--dur-fast)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand)'; }}
+              >
+                + {meta.action}
+              </button>
+            )}
           </div>
-
-          <button
-            onClick={handleLogout}
-            title="Wyloguj"
-            style={{
-              border: '1.5px solid var(--border-default)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'transparent',
-              width: 36, height: 36,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'background var(--dur-fast), color var(--dur-fast)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--surface-sunken)';
-              e.currentTarget.style.color = 'var(--text-body)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = 'var(--text-muted)';
-            }}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
         </div>
-      </nav>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {role === 'admin' && (
-          <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        )}
-        {role === 'user' && (
-          <UserSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        )}
-
-        <main style={{ flex: 1, overflowY: 'auto', padding: '32px 24px' }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+        {/* Content area */}
+        <div style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
+          <div style={{ maxWidth: 1240, margin: '0 auto', width: '100%' }}>
             {role === 'admin' ? (
-              activeTab === 'strona_glowna' ? (
-                <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)' }}>
-                  <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>Strona główna (w przygotowaniu)</p>
-                </div>
-              ) : activeTab === 'tablety' ? (
-                <AdminDashboard />
-              ) : activeTab === 'lokalizacje' ? (
-                <AdminLocations />
-              ) : activeTab === 'uzytkownicy' ? (
-                <AdminUsers />
-              ) : (
-                <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)' }}>
-                  <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>Pusta zakładka</p>
-                </div>
-              )
+              activeTab === 'strona_glowna' ? placeholder('Pulpit (w przygotowaniu)')
+              : activeTab === 'tablety'     ? <AdminDashboard addOpen={addOpen} onAddClose={() => setAddOpen(false)} />
+              : activeTab === 'lokalizacje' ? <AdminLocations addOpen={addOpen} onAddClose={() => setAddOpen(false)} />
+              : activeTab === 'uzytkownicy' ? <AdminUsers addOpen={addOpen} onAddClose={() => setAddOpen(false)} />
+              : placeholder('Pusta zakładka')
             ) : role === 'user' ? (
-              activeTab === 'kolejka' ? (
-                <UserQueue userName={userName} />
-              ) : (
-                <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', padding: 24, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)' }}>
-                  <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)' }}>Strona główna (w przygotowaniu)</p>
-                </div>
-              )
+              activeTab === 'kolejka' ? <UserQueue userName={userName} />
+              : placeholder('Strona główna (w przygotowaniu)')
             ) : null}
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

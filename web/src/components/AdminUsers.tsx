@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+type SystemRole = 'Operator' | 'Admin';
+type OnlineStatus = 'online' | 'away' | 'offline';
 
 interface UserData {
   id: string;
   fullName: string;
-  role: string;
+  stanowisko: string;
+  systemRole: SystemRole;
   password: string;
   locationIds: string[];
 }
@@ -14,313 +18,559 @@ interface Location {
   userIds: string[];
 }
 
-export default function AdminUsers() {
+/* ── helpers ─────────────────────────────────────────── */
+
+function getInitials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+}
+
+const AVATAR_TONES = [
+  { bg: 'var(--teal-100)',  fg: 'var(--teal-700)' },
+  { bg: 'var(--amber-100)', fg: 'var(--amber-700)' },
+  { bg: 'var(--blue-100)',  fg: 'var(--blue-600)' },
+  { bg: 'var(--green-100)', fg: 'var(--green-700)' },
+  { bg: 'var(--slate-200)', fg: 'var(--slate-700)' },
+];
+
+const STATUS_COLOR: Record<OnlineStatus, string> = {
+  online:  'var(--green-500)',
+  away:    'var(--amber-500)',
+  offline: 'var(--slate-400)',
+};
+
+const STATUS_LABEL: Record<OnlineStatus, string> = {
+  online:  'Online',
+  away:    'Zaraz wracam',
+  offline: 'Offline',
+};
+
+function randomStatus(): OnlineStatus {
+  const r = Math.random();
+  if (r < 0.5) return 'online';
+  if (r < 0.75) return 'away';
+  return 'offline';
+}
+
+/* ── sub-components ───────────────────────────────────── */
+
+function Avatar({ name, status, size = 44 }: { name: string; status: OnlineStatus; size?: number }) {
+  const tone = AVATAR_TONES[name.charCodeAt(0) % AVATAR_TONES.length];
+  const dotSize = Math.max(10, Math.round(size * 0.28));
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+      <span style={{
+        width: size, height: size, borderRadius: '50%',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: tone.bg, color: tone.fg,
+        fontFamily: 'var(--font-ui)', fontWeight: 700,
+        fontSize: Math.round(size * 0.38), lineHeight: 1, userSelect: 'none',
+      }}>
+        {getInitials(name) || '?'}
+      </span>
+      <span style={{
+        position: 'absolute', right: -1, bottom: -1,
+        width: dotSize, height: dotSize, borderRadius: '50%',
+        background: STATUS_COLOR[status],
+        border: '2px solid var(--surface-card)',
+      }} />
+    </span>
+  );
+}
+
+function RoleBadge({ role }: { role: SystemRole }) {
+  const isAdmin = role === 'Admin';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '4px 12px', borderRadius: 'var(--radius-md)',
+      fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13,
+      background: isAdmin ? 'var(--teal-50)'  : 'var(--slate-100)',
+      color:      isAdmin ? 'var(--teal-700)' : 'var(--slate-700)',
+      border:     isAdmin ? '1px solid var(--teal-200)' : '1px solid var(--slate-200)',
+    }}>
+      {role === 'Admin' ? 'Administrator' : 'Operator'}
+    </span>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', border: '1.5px solid var(--border-default)',
+  borderRadius: 'var(--radius-md)', padding: '11px 14px',
+  fontFamily: 'var(--font-ui)', fontSize: 15,
+  color: 'var(--text-strong)', background: 'var(--surface-card)',
+  outline: 'none', boxSizing: 'border-box',
+};
+const labelStyle: React.CSSProperties = {
+  display: 'block', marginBottom: 7,
+  fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600,
+  color: 'var(--text-body)',
+};
+const btnPrimary: React.CSSProperties = {
+  background: 'var(--brand)', color: 'var(--on-brand)', border: 'none',
+  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+  fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 14.5, cursor: 'pointer',
+};
+const btnSecondary: React.CSSProperties = {
+  background: 'transparent', color: 'var(--text-body)',
+  border: '1.5px solid var(--border-default)',
+  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14.5, cursor: 'pointer',
+};
+const btnDanger: React.CSSProperties = {
+  background: '#FEF2F2', color: '#CE363B', border: '1.5px solid #FEE2E2',
+  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14.5, cursor: 'pointer',
+};
+
+/* ── slide panel ──────────────────────────────────────── */
+
+function SlidePanel({ title, open, onClose, children, footer }: {
+  title: string; open: boolean; onClose: () => void;
+  children: React.ReactNode; footer: React.ReactNode;
+}) {
+  return (
+    <>
+      {open && <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(12,16,19,0.45)' }} onClick={onClose} />}
+      <aside style={{
+        position: 'fixed', inset: '0 0 0 auto', zIndex: 50,
+        width: '100%', maxWidth: 440,
+        background: 'var(--surface-card)',
+        boxShadow: '0 18px 48px rgba(21,27,31,0.16)',
+        display: 'flex', flexDirection: 'column',
+        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 250ms cubic-bezier(0.22,1,0.36,1)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, color: 'var(--text-strong)' }}>{title}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', display: 'flex', padding: 4, borderRadius: 'var(--radius-sm)' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>{children}</div>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--surface-sunken)' }}>
+          {footer}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+/* ── default data ─────────────────────────────────────── */
+
+const DEFAULT_USERS: UserData[] = [
+  { id: 'usr1', fullName: 'Jan Kowalski',     stanowisko: 'Lekarz kardiolog', systemRole: 'Operator', password: '', locationIds: ['loc1', 'loc3'] },
+  { id: 'usr2', fullName: 'Anna Nowak',       stanowisko: 'Recepcjonistka',   systemRole: 'Operator', password: '', locationIds: ['loc1', 'loc2'] },
+  { id: 'usr3', fullName: 'Piotr Wiśniewski', stanowisko: 'Administrator IT', systemRole: 'Admin',    password: '', locationIds: [] },
+];
+
+/* ── main component ───────────────────────────────────── */
+
+export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }: { addOpen?: boolean; onAddClose?: () => void }) {
   const [locations, setLocations] = useState<Location[]>(() => {
-    const savedLocations = localStorage.getItem('eque_locations');
-    if (savedLocations) return JSON.parse(savedLocations);
+    const saved = localStorage.getItem('eque_locations');
+    if (saved) return JSON.parse(saved);
     return [
-      { id: 'loc1', name: 'Hol Główny', userIds: ['usr1', 'usr2'] },
-      { id: 'loc2', name: 'Okienko Rejestracji 1', userIds: ['usr2'] },
+      { id: 'loc1', name: 'Hol Główny',              userIds: ['usr1', 'usr2'] },
+      { id: 'loc2', name: 'Okienko Rejestracji 1',   userIds: ['usr2'] },
       { id: 'loc3', name: 'Gabinet Kardiologiczny 12', userIds: ['usr1', 'usr3'] },
     ];
   });
 
   const [users, setUsers] = useState<UserData[]>(() => {
-    const savedUsers = localStorage.getItem('eque_users');
-    if (savedUsers) return JSON.parse(savedUsers);
-    return [
-      { id: 'usr1', fullName: 'Jan Kowalski', role: 'Lekarz kardiolog', locationIds: ['loc1', 'loc3'] },
-      { id: 'usr2', fullName: 'Anna Nowak', role: 'Recepcjonistka', locationIds: ['loc1', 'loc2'] },
-      { id: 'usr3', fullName: 'Piotr Wiśniewski', role: 'Administrator', locationIds: ['loc3'] },
-    ];
+    const saved = localStorage.getItem('eque_users');
+    if (!saved) return DEFAULT_USERS;
+    const parsed = JSON.parse(saved) as UserData[];
+    return parsed.map(u => ({
+      ...u,
+      stanowisko: u.stanowisko ?? (u as unknown as Record<string, string>).role ?? '',
+      systemRole: u.systemRole ?? 'Operator',
+      locationIds: u.locationIds ?? [],
+    }));
   });
-  
-  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
-  const [newFullName, setNewFullName] = useState('');
-  const [newUserRole, setNewUserRole] = useState('');
+
+  /* simulated statuses — one random flip every 8s */
+  const [statuses, setStatuses] = useState<Record<string, OnlineStatus>>(() =>
+    Object.fromEntries(users.map(u => [u.id, randomStatus()]))
+  );
+  useEffect(() => {
+    const id = setInterval(() => {
+      setStatuses(prev => {
+        const next = { ...prev };
+        const key = users[Math.floor(Math.random() * users.length)]?.id;
+        if (key) next[key] = randomStatus();
+        return next;
+      });
+    }, 8000);
+    return () => clearInterval(id);
+  }, [users]);
+
+  /* add panel — controlled by parent */
+  const [newName, setNewName] = useState('');
+  const [newStanowisko, setNewStanowisko] = useState('');
+  const [newSystemRole, setNewSystemRole] = useState<SystemRole>('Operator');
   const [newPassword, setNewPassword] = useState('');
 
-  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  /* edit panel — password input is always separate and starts empty */
+  const [editUser, setEditUser] = useState<UserData | null>(null);
+  const [editPasswordInput, setEditPasswordInput] = useState('');
 
-  const handleAddUser = () => {
-    if (!newFullName.trim()) return;
+  const saveUsers = (updated: UserData[]) => {
+    setUsers(updated);
+    localStorage.setItem('eque_users', JSON.stringify(updated));
+  };
+  const saveLocations = (updated: Location[]) => {
+    setLocations(updated);
+    localStorage.setItem('eque_locations', JSON.stringify(updated));
+  };
 
+  const openEdit = (user: UserData) => {
+    setEditUser({ ...user });
+    setEditPasswordInput(''); // always start empty — never reveal stored password
+  };
+
+  const handleAdd = () => {
+    if (!newName.trim()) return;
     const newUser: UserData = {
       id: Date.now().toString(),
-      fullName: newFullName,
-      role: newUserRole.trim() ? newUserRole : 'Brak przypisanej roli',
+      fullName: newName.trim(),
+      stanowisko: newStanowisko.trim(),
+      systemRole: newSystemRole,
       password: newPassword,
       locationIds: [],
     };
-
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
-
-    setIsSidePanelOpen(false);
-    setNewFullName('');
-    setNewUserRole('');
-    setNewPassword('');
-  };
-
-  const handleDeleteUser = () => {
-    if (!editingUser) return;
-    if (!window.confirm(`Czy na pewno chcesz usunąć pracownika "${editingUser.fullName}"? Tej operacji nie można cofnąć.`)) return;
-
-    const updatedUsers = users.filter(u => u.id !== editingUser.id);
-    setUsers(updatedUsers);
-    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
-
-    const updatedLocations = locations.map((l: Location) => ({
-      ...l,
-      userIds: (l.userIds || []).filter(id => id !== editingUser.id),
-    }));
-    setLocations(updatedLocations);
-    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
-
-    setEditingUser(null);
+    saveUsers([...users, newUser]);
+    setStatuses(prev => ({ ...prev, [newUser.id]: 'online' }));
+    onAddClose?.();
+    setNewName(''); setNewStanowisko(''); setNewSystemRole('Operator'); setNewPassword('');
   };
 
   const handleSaveEdit = () => {
-    if (!editingUser) return;
-    
-    const updatedUsers = users.map(u => u.id === editingUser.id ? editingUser : u);
-    setUsers(updatedUsers);
-    localStorage.setItem('eque_users', JSON.stringify(updatedUsers));
-
-    const updatedLocations = locations.map((l: Location) => {
-      const filteredUsers = (l.userIds || []).filter(id => id !== editingUser.id);
-      if (editingUser.locationIds.includes(l.id)) {
-        filteredUsers.push(editingUser.id);
-      }
-      return { ...l, userIds: Array.from(new Set(filteredUsers)) };
+    if (!editUser) return;
+    const toSave: UserData = {
+      ...editUser,
+      // only update password if user actually typed something
+      password: editPasswordInput.trim() !== '' ? editPasswordInput : editUser.password,
+    };
+    saveUsers(users.map(u => u.id === toSave.id ? toSave : u));
+    const updatedLocs = locations.map(l => {
+      const filtered = (l.userIds ?? []).filter(id => id !== toSave.id);
+      if (toSave.locationIds.includes(l.id)) filtered.push(toSave.id);
+      return { ...l, userIds: Array.from(new Set(filtered)) };
     });
-    
-    localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
-    setLocations(updatedLocations);
-    setEditingUser(null);
+    saveLocations(updatedLocs);
+    setEditUser(null);
   };
 
-  const getInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 0) return '';
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  const handleDelete = () => {
+    if (!editUser) return;
+    if (!window.confirm(`Usunąć użytkownika "${editUser.fullName}"?`)) return;
+    saveUsers(users.filter(u => u.id !== editUser.id));
+    saveLocations(locations.map(l => ({ ...l, userIds: (l.userIds ?? []).filter(id => id !== editUser.id) })));
+    setEditUser(null);
   };
 
-  if (editingUser) {
-    return (
-      <div className="mx-auto max-w-2xl animate-fade-in">
-        <button 
-          onClick={() => setEditingUser(null)}
-          className="mb-6 flex items-center text-sm font-semibold text-gray-500 transition-colors hover:text-gray-800"
-        >
-          <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Wróć do listy pracowników
-        </button>
+  /* fix 1: all locations for a user, comma-separated */
+  const allLocationNames = (u: UserData) =>
+    locations.filter(l => u.locationIds.includes(l.id)).map(l => l.name);
 
-        <div className="rounded-xl bg-white p-8 shadow-sm border border-gray-200">
-          <div className="mb-6 flex items-center space-x-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand-subtle-2)] text-xl font-bold text-[var(--text-brand)]">
-              {getInitials(editingUser.fullName)}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-800">Edycja pracownika</h2>
-          </div>
-          
-          <div className="flex flex-col space-y-5">
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Imię i nazwisko</label>
-              <input
-                type="text"
-                value={editingUser.fullName}
-                onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Hasło</label>
-              <input
-                type="password"
-                value={editingUser.password ?? ''}
-                onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
-                placeholder="Zostaw puste aby nie zmieniać"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Stanowisko / Rola</label>
-              <input
-                type="text"
-                value={editingUser.role}
-                onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisane lokalizacje</label>
-              <div className="max-h-60 overflow-y-auto rounded-md border border-gray-300 bg-white">
-                {locations.map(loc => (
-                  <label key={loc.id} className="flex cursor-pointer items-center px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                    <input
-                      type="checkbox"
-                      checked={editingUser.locationIds.includes(loc.id)}
-                      onChange={(e) => {
-                        const newLocationIds = e.target.checked 
-                          ? [...editingUser.locationIds, loc.id]
-                          : editingUser.locationIds.filter(id => id !== loc.id);
-                        setEditingUser({ ...editingUser, locationIds: newLocationIds });
-                      }}
-                      className="mr-3 h-4 w-4 rounded border-gray-300 text-[var(--text-brand)] focus:ring-[#1877f2]"
-                    />
-                    <span className="text-sm font-medium text-gray-700">{loc.name}</span>
-                  </label>
-                ))}
-                {locations.length === 0 && <div className="p-4 text-sm text-gray-500">Brak dostępnych lokalizacji</div>}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
-            <button
-              onClick={handleDeleteUser}
-              className="rounded-md border border-red-200 bg-red-50 px-6 py-2.5 font-semibold text-red-600 transition-colors hover:bg-red-100"
-            >
-              Usuń pracownika
-            </button>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setEditingUser(null)}
-                className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="rounded-md bg-[var(--brand)] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
-              >
-                Zapisz zmiany
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  /* ── render ────────────────────────────────────────── */
   return (
-    <div className="relative animate-fade-in">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-800">Zarządzanie personelem</h2>
-        <button
-          onClick={() => setIsSidePanelOpen(true)}
-          className="rounded-md bg-[var(--brand)] px-4 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
-        >
-          + Dodaj pracownika
-        </button>
-      </div>
-
-      <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-gray-200">
-        <ul className="divide-y divide-gray-100">
-          {users.map((user) => (
-            <li key={user.id}>
-              <button 
-                onClick={() => setEditingUser(user)}
-                className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-[var(--brand-subtle)]"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--surface-sunken)] text-[var(--text-muted)] font-bold group-hover:bg-[var(--brand-subtle-2)] group-hover:text-[var(--text-brand)] transition-colors">
-                    {getInitials(user.fullName)}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-800 transition-colors group-hover:text-[var(--text-brand)]">
-                      {user.fullName}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {user.role} • Dostęp do lokalizacji: {(user.locationIds || []).filter(id => locations.some(l => l.id === id)).length}
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <svg className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[var(--text-brand)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </button>
-            </li>
-          ))}
-          {users.length === 0 && (
-            <li className="p-6 text-center text-gray-500">Brak dodanych użytkowników.</li>
-          )}
-        </ul>
-      </div>
-
-      {isSidePanelOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
-          onClick={() => setIsSidePanelOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out ${
-          isSidePanelOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h3 className="text-xl font-bold text-gray-800">Nowy pracownik</h3>
-          <button onClick={() => setIsSidePanelOpen(false)} className="rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <div>
+      {/* User list */}
+      <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
+        {/* Table header */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 44px',
+          gap: 12, padding: '12px 24px',
+          borderBottom: '1px solid var(--border-subtle)',
+          fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700,
+          textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-faint)',
+        }}>
+          <span>Pracownik</span><span>Lokalizacja</span><span>Rola</span><span></span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="flex flex-col space-y-5">
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Imię i nazwisko</label>
-              <input
-                type="text"
-                value={newFullName}
-                onChange={(e) => setNewFullName(e.target.value)}
-                placeholder="np. Anna Nowak"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Hasło</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Hasło do logowania"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Stanowisko / Rola</label>
-              <input
-                type="text"
-                value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value)}
-                placeholder="np. Recepcjonistka"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[var(--focus-ring)] focus:ring-1 focus:ring-[var(--focus-ring)]"
-              />
-            </div>
+        {users.length === 0 && (
+          <div style={{ padding: 36, textAlign: 'center', fontFamily: 'var(--font-ui)', color: 'var(--text-muted)', fontSize: 15 }}>
+            Brak dodanych pracowników.
           </div>
-        </div>
+        )}
 
-        <div className="border-t border-gray-200 px-6 py-4 flex justify-end space-x-3 bg-gray-50">
-          <button onClick={() => setIsSidePanelOpen(false)} className="rounded-md bg-white border border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-50">
-            Anuluj
-          </button>
-          <button onClick={handleAddUser} className="rounded-md bg-[var(--brand)] px-6 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]">
+        {users.map((user, i) => {
+          const status = statuses[user.id] ?? 'offline';
+          const locNames = allLocationNames(user); // fix 1: all locations
+          const isAdmin = user.systemRole === 'Admin';
+
+          return (
+            <div
+              key={user.id}
+              style={{
+                display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 44px',
+                gap: 12, alignItems: 'center', padding: '17px 24px',
+                borderBottom: i < users.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+              }}
+            >
+              {/* Avatar + name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                <Avatar name={user.fullName} status={status} size={44} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15.5, color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user.fullName}
+                  </div>
+                  {user.stanowisko && (
+                    <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {user.stanowisko}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Location column */}
+              <div style={{ minWidth: 0 }}>
+                {isAdmin ? (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--teal-600)',
+                    fontStyle: 'italic',
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Dostęp globalny
+                  </span>
+                ) : locNames.length > 0 ? (() => {
+                  const overflow = locNames.length > 2;
+                  const visible = overflow ? locNames.slice(0, 1) : locNames;
+                  const extra = overflow ? locNames.length - 1 : 0;
+                  return (
+                    <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 5, alignItems: 'center', overflow: 'hidden' }}>
+                      {visible.map(name => (
+                        <span key={name} style={{
+                          display: 'inline-block',
+                          padding: '3px 9px',
+                          background: 'var(--surface-sunken)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: 'var(--radius-md)',
+                          fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 600,
+                          color: 'var(--text-body)',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          maxWidth: 130,
+                        }}>
+                          {name}
+                        </span>
+                      ))}
+                      {extra > 0 && (
+                        <span style={{
+                          display: 'inline-block', flexShrink: 0,
+                          padding: '3px 9px',
+                          background: 'var(--brand-subtle)',
+                          border: '1px solid var(--brand-border)',
+                          borderRadius: 'var(--radius-md)',
+                          fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 700,
+                          color: 'var(--text-brand)',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          +{extra}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })() : (
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--text-faint)' }}>—</span>
+                )}
+              </div>
+
+              {/* Role badge */}
+              <div><RoleBadge role={user.systemRole} /></div>
+
+              {/* Edit button */}
+              <button
+                onClick={() => openEdit(user)}
+                title="Edytuj"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
+                  transition: 'background var(--dur-fast), color var(--dur-fast)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-sunken)'; e.currentTarget.style.color = 'var(--text-body)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Add panel ─────────────────────────────────── */}
+      <SlidePanel title="Nowy użytkownik" open={addPanelOpen} onClose={() => onAddClose?.()} footer={
+        <>
+          <button style={btnPrimary} onClick={handleAdd}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand)'; }}>
             Dodaj
           </button>
+        </>
+      }>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <Field label="Imię i nazwisko">
+            <input style={inputStyle} type="text" value={newName} onChange={e => setNewName(e.target.value)}
+              placeholder="np. Anna Nowak"
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }} />
+          </Field>
+          <Field label="Stanowisko (opcjonalnie)">
+            <input style={inputStyle} type="text" value={newStanowisko} onChange={e => setNewStanowisko(e.target.value)}
+              placeholder="np. Recepcjonistka"
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }} />
+          </Field>
+          <Field label="Rola systemowa">
+            <select style={inputStyle} value={newSystemRole} onChange={e => setNewSystemRole(e.target.value as SystemRole)}
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}>
+              <option value="Operator">Operator</option>
+              <option value="Admin">Administrator</option>
+            </select>
+          </Field>
+          <Field label="Hasło">
+            <input style={inputStyle} type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+              placeholder="Hasło do logowania"
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }} />
+          </Field>
         </div>
-      </aside>
+      </SlidePanel>
+
+      {/* ── Edit panel ────────────────────────────────── */}
+      <SlidePanel title="Edytuj użytkownika" open={!!editUser} onClose={() => setEditUser(null)} footer={
+        <>
+          <button style={btnDanger} onClick={handleDelete}>Usuń</button>
+          <button style={{ ...btnPrimary, marginLeft: 'auto' }} onClick={handleSaveEdit}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand)'; }}>
+            Zapisz
+          </button>
+        </>
+      }>
+        {editUser && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Avatar preview */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-md)' }}>
+              <Avatar name={editUser.fullName || '?'} status={statuses[editUser.id] ?? 'offline'} size={48} />
+              <div>
+                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-strong)' }}>{editUser.fullName || '—'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[statuses[editUser.id] ?? 'offline'], display: 'inline-block' }} />
+                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)' }}>
+                    {STATUS_LABEL[statuses[editUser.id] ?? 'offline']}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <Field label="Imię i nazwisko">
+              <input style={inputStyle} type="text" value={editUser.fullName}
+                onChange={e => setEditUser({ ...editUser, fullName: e.target.value })}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }} />
+            </Field>
+
+            <Field label="Stanowisko">
+              <input style={inputStyle} type="text" value={editUser.stanowisko}
+                onChange={e => setEditUser({ ...editUser, stanowisko: e.target.value })}
+                placeholder="np. Recepcjonistka"
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }} />
+            </Field>
+
+            <Field label="Rola systemowa">
+              <select style={inputStyle}
+                value={editUser.systemRole}
+                onChange={e => {
+                  const role = e.target.value as SystemRole;
+                  setEditUser({
+                    ...editUser,
+                    systemRole: role,
+                    /* fix 2: admin has no locations — clear them */
+                    locationIds: role === 'Admin' ? [] : editUser.locationIds,
+                  });
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}>
+                <option value="Operator">Operator</option>
+                <option value="Admin">Administrator</option>
+              </select>
+            </Field>
+
+            {/* fix 3: password input always empty — never pre-filled */}
+            <Field label="Nowe hasło">
+              <input style={inputStyle} type="password"
+                value={editPasswordInput}
+                onChange={e => setEditPasswordInput(e.target.value)}
+                placeholder="Zostaw puste aby nie zmieniać"
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }} />
+            </Field>
+
+            {/* fix 2: hide location checkboxes for admins */}
+            {editUser.systemRole === 'Operator' && (
+              <Field label="Przypisane lokalizacje">
+                <div style={{ border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                  {locations.map((loc, i) => (
+                    <label key={loc.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '12px 16px', cursor: 'pointer',
+                      borderBottom: i < locations.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                      background: editUser.locationIds.includes(loc.id) ? 'var(--brand-subtle)' : 'transparent',
+                    }}>
+                      <input type="checkbox"
+                        checked={editUser.locationIds.includes(loc.id)}
+                        onChange={e => {
+                          const ids = e.target.checked
+                            ? [...editUser.locationIds, loc.id]
+                            : editUser.locationIds.filter(id => id !== loc.id);
+                          setEditUser({ ...editUser, locationIds: ids });
+                        }}
+                        style={{ accentColor: 'var(--brand)', width: 16, height: 16 }} />
+                      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14.5, fontWeight: 600, color: 'var(--text-body)' }}>{loc.name}</span>
+                    </label>
+                  ))}
+                  {locations.length === 0 && (
+                    <div style={{ padding: 16, fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-muted)' }}>Brak dostępnych lokalizacji</div>
+                  )}
+                </div>
+              </Field>
+            )}
+
+            {/* fix 2: info for admin */}
+            {editUser.systemRole === 'Admin' && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '14px 16px', background: 'var(--teal-50)', borderRadius: 'var(--radius-md)', border: '1px solid var(--teal-200)' }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--teal-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--teal-700)', margin: 0, lineHeight: 1.5 }}>
+                  Administratorzy mają dostęp globalny do wszystkich lokalizacji. Przypisanie do konkretnych lokalizacji nie dotyczy tej roli.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </SlidePanel>
     </div>
   );
 }

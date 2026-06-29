@@ -1,12 +1,15 @@
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  userName: string;
+  userRole: string;
+  onLogout: () => void;
 }
 
 const NAV = [
   {
     key: 'strona_glowna',
-    label: 'Strona główna',
+    label: 'Pulpit',
     icon: (
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -44,18 +47,33 @@ const NAV = [
   },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+function getInitials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+}
+
+export default function Sidebar({ activeTab, setActiveTab, userName, userRole, onLogout }: SidebarProps) {
+  const initials = getInitials(userName);
+
   return (
     <aside style={{
-      width: 232,
+      width: 280,
       flexShrink: 0,
+      height: '100vh',
       background: 'var(--surface-card)',
       borderRight: '1px solid var(--border-subtle)',
       display: 'flex',
       flexDirection: 'column',
-      padding: '16px 12px',
     }}>
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* Logo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '26px 22px 20px' }}>
+        <img src="/logo-mark.svg" width="36" height="36" alt="" />
+        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 23, letterSpacing: '-0.01em', color: 'var(--text-strong)' }}>
+          eQue
+        </span>
+      </div>
+
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: '4px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV.map((item) => {
           const active = activeTab === item.key;
           return (
@@ -63,24 +81,16 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
               key={item.key}
               onClick={() => setActiveTab(item.key)}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 11,
-                padding: '10px 12px',
-                border: 'none',
-                cursor: 'pointer',
-                borderRadius: 'var(--radius-md)',
-                textAlign: 'left',
-                width: '100%',
+                display: 'flex', alignItems: 'center', gap: 11,
+                padding: '12px 16px', border: 'none', cursor: 'pointer',
+                borderRadius: 'var(--radius-md)', textAlign: 'left', width: '100%',
                 background: active ? 'var(--brand-subtle)' : 'transparent',
                 color: active ? 'var(--text-brand)' : 'var(--text-body)',
-                fontFamily: 'var(--font-ui)',
-                fontSize: 14.5,
-                fontWeight: active ? 700 : 600,
-                transition: `background var(--dur-fast) var(--ease-out)`,
+                fontFamily: 'var(--font-ui)', fontSize: 16, fontWeight: active ? 700 : 600,
+                transition: 'background var(--dur-fast) var(--ease-out)',
               }}
-              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--surface-sunken)'; }}
-              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--surface-sunken)'; }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
             >
               {item.icon}
               {item.label}
@@ -88,6 +98,63 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* User + logout */}
+      <div style={{
+        borderTop: '1px solid var(--border-subtle)',
+        padding: '16px 18px',
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        {/* Avatar with online dot */}
+        <span style={{ position: 'relative', flexShrink: 0 }}>
+          <span style={{
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'var(--brand-subtle-2)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 13,
+            color: 'var(--text-brand)',
+          }}>
+            {initials}
+          </span>
+          <span style={{
+            position: 'absolute', right: -1, bottom: -1,
+            width: 10, height: 10, borderRadius: '50%',
+            background: 'var(--green-500)',
+            border: '2px solid var(--surface-card)',
+          }} />
+        </span>
+
+        {/* Name + role */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 13.5, color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {userName}
+          </div>
+          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'var(--text-muted)' }}>
+            {userRole === 'admin' ? 'Administrator' : 'Użytkownik'}
+          </div>
+        </div>
+
+        {/* Logout button */}
+        <button
+          onClick={onLogout}
+          title="Wyloguj"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-faint)', padding: 6, borderRadius: 'var(--radius-sm)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+            transition: 'background var(--dur-fast), color var(--dur-fast)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-sunken)'; e.currentTarget.style.color = 'var(--text-body)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+      </div>
     </aside>
   );
 }

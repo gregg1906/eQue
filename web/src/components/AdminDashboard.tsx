@@ -69,7 +69,7 @@ const labelStyle: React.CSSProperties = {
   color: 'var(--text-body)',
 };
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ addOpen = false, onAddClose }: { addOpen?: boolean; onAddClose?: () => void }) {
   const [locations] = useState<Location[]>(() => {
     const saved = localStorage.getItem('eque_locations');
     if (saved) return JSON.parse(saved);
@@ -90,7 +90,6 @@ export default function AdminDashboard() {
     ];
   });
 
-  const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
 
   const handleSimulateScan = () => {
@@ -98,7 +97,7 @@ export default function AdminDashboard() {
     const updated = [...devices, newDevice];
     setDevices(updated);
     localStorage.setItem('eque_devices', JSON.stringify(updated));
-    setIsPopupOpen(false);
+    onAddClose?.();
   };
 
   const handleSaveEdit = () => {
@@ -185,17 +184,6 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, color: 'var(--text-strong)', margin: 0 }}>Zarządzanie tabletami</h2>
-        <button
-          style={btnPrimary}
-          onClick={() => setIsPopupOpen(true)}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--brand)'; }}
-        >
-          + Dodaj urządzenie
-        </button>
-      </div>
 
       <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -231,7 +219,7 @@ export default function AdminDashboard() {
         </ul>
       </div>
 
-      {isPopupOpen && (
+      {addOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12,16,19,0.55)', padding: 16 }}>
           <div style={{ width: '100%', maxWidth: 360, background: 'var(--surface-card)', borderRadius: 'var(--radius-xl)', padding: 28, boxShadow: '0 18px 48px rgba(21,27,31,0.16)' }}>
             <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-strong)', textAlign: 'center', marginBottom: 6 }}>Skonfiguruj nowe urządzenie</h3>
@@ -246,7 +234,7 @@ export default function AdminDashboard() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button
                 style={{ ...btnSecondary, flex: 1 }}
-                onClick={() => setIsPopupOpen(false)}
+                onClick={onAddClose}
               >
                 Wstecz
               </button>

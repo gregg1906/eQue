@@ -23,6 +23,26 @@
   --slate-800: #232B30;
   --slate-900: #151B1F;
 
+  /* Amber */
+  --amber-50:  #FFF8EB;
+  --amber-100: #FDEDC8;
+  --amber-500: #F2A60C;
+  --amber-600: #D98906;
+  --amber-700: #A9650A;
+
+  /* Green */
+  --green-50:  #ECFDF3;
+  --green-100: #D1FADF;
+  --green-500: #16A34A;
+  --green-600: #128A3E;
+  --green-700: #0F6E33;
+
+  /* Blue */
+  --blue-50:  #EFF6FF;
+  --blue-100: #DBEAFE;
+  --blue-500: #3B82F6;
+  --blue-600: #2563EB;
+
   /* Semantic */
   --brand:          var(--teal-500);
   --brand-hover:    var(--teal-600);

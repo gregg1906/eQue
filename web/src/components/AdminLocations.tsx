@@ -19,7 +19,7 @@ interface Device {
   locationId: string;
 }
 
-export default function AdminLocations() {
+export default function AdminLocations({ addOpen = false, onAddClose }: { addOpen?: boolean; onAddClose?: () => void }) {
   const [devices, setDevices] = useState<Device[]>(() => {
     const saved = localStorage.getItem('eque_devices');
     return saved ? JSON.parse(saved) : [];
@@ -45,7 +45,6 @@ export default function AdminLocations() {
     ];
   });
 
-  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
 
@@ -71,7 +70,7 @@ export default function AdminLocations() {
     setLocations(updatedLocations);
     localStorage.setItem('eque_locations', JSON.stringify(updatedLocations));
 
-    setIsSidePanelOpen(false);
+    onAddClose?.();
     setNewName('');
     setNewDescription('');
   };
@@ -244,15 +243,6 @@ export default function AdminLocations() {
 
   return (
     <div className="relative animate-fade-in">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-800">Zarządzanie lokalizacjami</h2>
-        <button
-          onClick={() => setIsSidePanelOpen(true)}
-          className="rounded-md bg-[var(--brand)] px-4 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]"
-        >
-          + Dodaj lokalizację
-        </button>
-      </div>
 
       <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-gray-200">
         <ul className="divide-y divide-gray-100">
@@ -284,21 +274,21 @@ export default function AdminLocations() {
         </ul>
       </div>
 
-      {isSidePanelOpen && (
+      {addOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity"
-          onClick={() => setIsSidePanelOpen(false)}
+          onClick={() => onAddClose?.()}
         />
       )}
 
       <aside
         className={`fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out ${
-          isSidePanelOpen ? 'translate-x-0' : 'translate-x-full'
+          addOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <h3 className="text-xl font-bold text-gray-800">Nowa lokalizacja</h3>
-          <button onClick={() => setIsSidePanelOpen(false)} className="rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+          <button onClick={() => onAddClose?.()} className="rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -330,10 +320,7 @@ export default function AdminLocations() {
           </div>
         </div>
 
-        <div className="border-t border-gray-200 px-6 py-4 flex justify-end space-x-3 bg-gray-50">
-          <button onClick={() => setIsSidePanelOpen(false)} className="rounded-md bg-white border border-gray-300 px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-50">
-            Anuluj
-          </button>
+        <div className="border-t border-gray-200 px-6 py-4 flex justify-end bg-gray-50">
           <button onClick={handleAddLocation} className="rounded-md bg-[var(--brand)] px-6 py-2 font-semibold text-white transition-colors hover:bg-[var(--brand-hover)]">
             Dodaj
           </button>
