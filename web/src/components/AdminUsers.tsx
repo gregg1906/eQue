@@ -10,6 +10,7 @@ interface UserData {
   systemRole: SystemRole;
   password: string;
   locationIds: string[];
+  active: boolean;
 }
 
 interface Location {
@@ -53,11 +54,11 @@ function randomStatus(): OnlineStatus {
 
 /* ── sub-components ───────────────────────────────────── */
 
-function Avatar({ name, status, size = 44 }: { name: string; status: OnlineStatus; size?: number }) {
-  const tone = AVATAR_TONES[name.charCodeAt(0) % AVATAR_TONES.length];
+function Avatar({ name, status, active = true, size = 44 }: { name: string; status: OnlineStatus; active?: boolean; size?: number }) {
+  const tone = active ? AVATAR_TONES[name.charCodeAt(0) % AVATAR_TONES.length] : { bg: 'var(--slate-100)', fg: 'var(--slate-400)' };
   const dotSize = Math.max(10, Math.round(size * 0.28));
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+    <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, opacity: active ? 1 : 0.7 }}>
       <span style={{
         width: size, height: size, borderRadius: '50%',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -70,26 +71,69 @@ function Avatar({ name, status, size = 44 }: { name: string; status: OnlineStatu
       <span style={{
         position: 'absolute', right: -1, bottom: -1,
         width: dotSize, height: dotSize, borderRadius: '50%',
-        background: STATUS_COLOR[status],
+        background: active ? STATUS_COLOR[status] : 'var(--slate-400)',
         border: '2px solid var(--surface-card)',
       }} />
     </span>
   );
 }
 
-function RoleBadge({ role }: { role: SystemRole }) {
+function RoleBadge({ role, active = true }: { role: SystemRole; active?: boolean }) {
   const isAdmin = role === 'Admin';
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
       padding: '4px 12px', borderRadius: 'var(--radius-md)',
       fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 13,
-      background: isAdmin ? 'var(--teal-50)'  : 'var(--slate-100)',
-      color:      isAdmin ? 'var(--teal-700)' : 'var(--slate-700)',
-      border:     isAdmin ? '1px solid var(--teal-200)' : '1px solid var(--slate-200)',
+      background: !active ? 'var(--slate-100)' : isAdmin ? 'var(--teal-50)'  : 'var(--slate-100)',
+      color:      !active ? 'var(--slate-400)' : isAdmin ? 'var(--teal-700)' : 'var(--slate-700)',
+      border:     !active ? '1px solid var(--slate-200)' : isAdmin ? '1px solid var(--teal-200)' : '1px solid var(--slate-200)',
     }}>
       {role === 'Admin' ? 'Administrator' : 'Operator'}
     </span>
+  );
+}
+
+function StatusBadge({ tone, children }: { tone: 'success' | 'warning' | 'neutral'; children: React.ReactNode }) {
+  const map = {
+    success: { fg: 'var(--green-700)', bg: 'var(--green-50)', bd: 'var(--green-100)', dot: 'var(--green-600)' },
+    warning: { fg: 'var(--amber-700)', bg: 'var(--amber-50)', bd: 'var(--amber-100)', dot: 'var(--amber-600)' },
+    neutral: { fg: 'var(--slate-700)', bg: 'var(--slate-100)', bd: 'var(--slate-200)', dot: 'var(--slate-500)' },
+  } as const;
+  const c = map[tone];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+      padding: '3px 10px', borderRadius: 'var(--radius-pill)',
+      fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600,
+      background: c.bg, color: c.fg, border: `1px solid ${c.bd}`, whiteSpace: 'nowrap',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, flexShrink: 0 }} />
+      {children}
+    </span>
+  );
+}
+
+function Switch({ checked, onChange, ariaLabel }: { checked: boolean; onChange: () => void; ariaLabel: string }) {
+  const w = 44, h = 24, k = 18;
+  return (
+    <button
+      role="switch" aria-checked={checked} aria-label={ariaLabel}
+      onClick={onChange}
+      style={{
+        position: 'relative', width: w, height: h, flexShrink: 0,
+        borderRadius: 'var(--radius-pill)', border: 'none', padding: 0,
+        background: checked ? 'var(--brand)' : 'var(--slate-300)',
+        cursor: 'pointer', transition: 'background var(--dur-base) var(--ease-out)',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: (h - k) / 2,
+        left: checked ? w - k - (h - k) / 2 : (h - k) / 2,
+        width: k, height: k, borderRadius: '50%', background: '#fff',
+        boxShadow: 'var(--shadow-sm)', transition: 'left var(--dur-base) var(--ease-out)',
+      }} />
+    </button>
   );
 }
 
@@ -169,9 +213,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 /* ── default data ─────────────────────────────────────── */
 
 const DEFAULT_USERS: UserData[] = [
-  { id: 'usr1', fullName: 'Jan Kowalski',     stanowisko: 'Lekarz kardiolog', systemRole: 'Operator', password: '', locationIds: ['loc1', 'loc3'] },
-  { id: 'usr2', fullName: 'Anna Nowak',       stanowisko: 'Recepcjonistka',   systemRole: 'Operator', password: '', locationIds: ['loc1', 'loc2'] },
-  { id: 'usr3', fullName: 'Piotr Wiśniewski', stanowisko: 'Administrator IT', systemRole: 'Admin',    password: '', locationIds: [] },
+  { id: 'usr1', fullName: 'Jan Kowalski',     stanowisko: 'Lekarz kardiolog', systemRole: 'Operator', password: '', locationIds: ['loc1', 'loc3'], active: true },
+  { id: 'usr2', fullName: 'Anna Nowak',       stanowisko: 'Recepcjonistka',   systemRole: 'Operator', password: '', locationIds: ['loc1', 'loc2'], active: true },
+  { id: 'usr3', fullName: 'Piotr Wiśniewski', stanowisko: 'Administrator IT', systemRole: 'Admin',    password: '', locationIds: [], active: true },
 ];
 
 /* ── main component ───────────────────────────────────── */
@@ -196,6 +240,7 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
       stanowisko: u.stanowisko ?? (u as unknown as Record<string, string>).role ?? '',
       systemRole: u.systemRole ?? 'Operator',
       locationIds: u.locationIds ?? [],
+      active: u.active ?? true,
     }));
   });
 
@@ -248,6 +293,7 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
       systemRole: newSystemRole,
       password: newPassword,
       locationIds: [],
+      active: true,
     };
     saveUsers([...users, newUser]);
     setStatuses(prev => ({ ...prev, [newUser.id]: 'online' }));
@@ -280,6 +326,10 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
     setEditUser(null);
   };
 
+  const handleToggleActive = (user: UserData) => {
+    saveUsers(users.map(u => u.id === user.id ? { ...u, active: !u.active } : u));
+  };
+
   /* fix 1: all locations for a user, comma-separated */
   const allLocationNames = (u: UserData) =>
     locations.filter(l => u.locationIds.includes(l.id)).map(l => l.name);
@@ -291,13 +341,13 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
       <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)', overflow: 'hidden' }}>
         {/* Table header */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 44px',
+          display: 'grid', gridTemplateColumns: '2fr 1.4fr 0.9fr 1fr 96px',
           gap: 12, padding: '12px 24px',
           borderBottom: '1px solid var(--border-subtle)',
           fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700,
           textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-faint)',
         }}>
-          <span>Pracownik</span><span>Lokalizacja</span><span>Rola</span><span></span>
+          <span>Pracownik</span><span>Lokalizacja</span><span>Rola</span><span>Status</span><span></span>
         </div>
 
         {users.length === 0 && (
@@ -311,20 +361,28 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
           const locNames = allLocationNames(user); // fix 1: all locations
           const isAdmin = user.systemRole === 'Admin';
 
+          const badge = !user.active
+            ? { tone: 'neutral' as const, label: 'Dezaktywowany' }
+            : status === 'online' ? { tone: 'success' as const, label: 'Online' }
+            : status === 'away' ? { tone: 'warning' as const, label: 'Zaraz wracam' }
+            : { tone: 'neutral' as const, label: 'Offline' };
+
           return (
             <div
               key={user.id}
               style={{
-                display: 'grid', gridTemplateColumns: '2.2fr 1.6fr 1fr 44px',
+                display: 'grid', gridTemplateColumns: '2fr 1.4fr 0.9fr 1fr 96px',
                 gap: 12, alignItems: 'center', padding: '17px 24px',
+                background: user.active ? 'transparent' : 'var(--surface-sunken)',
                 borderBottom: i < users.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                transition: 'background var(--dur-base) var(--ease-out)',
               }}
             >
               {/* Avatar + name */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-                <Avatar name={user.fullName} status={status} size={44} />
+                <Avatar name={user.fullName} status={status} active={user.active} size={44} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15.5, color: 'var(--text-strong)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15.5, color: user.active ? 'var(--text-strong)' : 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {user.fullName}
                   </div>
                   {user.stanowisko && (
@@ -391,26 +449,36 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
               </div>
 
               {/* Role badge */}
-              <div><RoleBadge role={user.systemRole} /></div>
+              <div><RoleBadge role={user.systemRole} active={user.active} /></div>
 
-              {/* Edit button */}
-              <button
-                onClick={() => openEdit(user)}
-                title="Edytuj"
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
-                  transition: 'background var(--dur-fast), color var(--dur-fast)',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-sunken)'; e.currentTarget.style.color = 'var(--text-body)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-faint)'; }}
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-              </button>
+              {/* Status badge */}
+              <div><StatusBadge tone={badge.tone}>{badge.label}</StatusBadge></div>
+
+              {/* Actions: deactivate switch + edit */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                <Switch
+                  checked={user.active}
+                  onChange={() => handleToggleActive(user)}
+                  ariaLabel={user.active ? `Dezaktywuj konto ${user.fullName}` : `Aktywuj konto ${user.fullName}`}
+                />
+                <button
+                  onClick={() => openEdit(user)}
+                  title="Edytuj"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 36, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0,
+                    transition: 'background var(--dur-fast), color var(--dur-fast)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-sunken)'; e.currentTarget.style.color = 'var(--text-body)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           );
         })}
@@ -471,14 +539,20 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* Avatar preview */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-md)' }}>
-              <Avatar name={editUser.fullName || '?'} status={statuses[editUser.id] ?? 'offline'} size={48} />
-              <div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-strong)' }}>{editUser.fullName || '—'}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[statuses[editUser.id] ?? 'offline'], display: 'inline-block' }} />
-                  <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)' }}>
-                    {STATUS_LABEL[statuses[editUser.id] ?? 'offline']}
-                  </span>
+              <Avatar name={editUser.fullName || '?'} status={statuses[editUser.id] ?? 'offline'} active={editUser.active} size={48} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: editUser.active ? 'var(--text-strong)' : 'var(--text-faint)' }}>{editUser.fullName || '—'}</div>
+                <div style={{ marginTop: 5 }}>
+                  {editUser.active ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[statuses[editUser.id] ?? 'offline'], display: 'inline-block' }} />
+                      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-muted)' }}>
+                        {STATUS_LABEL[statuses[editUser.id] ?? 'offline']}
+                      </span>
+                    </div>
+                  ) : (
+                    <StatusBadge tone="neutral">Dezaktywowany</StatusBadge>
+                  )}
                 </div>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import LoginForm from './components/LoginForm';
+import AdminHome from './components/AdminHome';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLocations from './components/AdminLocations';
 import AdminUsers from './components/AdminUsers';
@@ -117,7 +118,7 @@ export default function App() {
         <div style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
           <div style={{ maxWidth: 1240, margin: '0 auto', width: '100%' }}>
             {role === 'admin' ? (
-              activeTab === 'strona_glowna' ? placeholder('Pulpit (w przygotowaniu)')
+              activeTab === 'strona_glowna' ? <AdminHome userName={userName} />
               : activeTab === 'tablety'     ? <AdminDashboard addOpen={addOpen} onAddClose={() => setAddOpen(false)} />
               : activeTab === 'lokalizacje' ? <AdminLocations addOpen={addOpen} onAddClose={() => setAddOpen(false)} />
               : activeTab === 'uzytkownicy' ? <AdminUsers addOpen={addOpen} onAddClose={() => setAddOpen(false)} />
