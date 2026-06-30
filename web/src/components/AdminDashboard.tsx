@@ -12,6 +12,7 @@ interface Device {
 interface Location {
   id: string;
   name: string;
+  active?: boolean;
 }
 
 interface SimState {
@@ -189,7 +190,7 @@ const labelStyle: React.CSSProperties = {
 
 /* ── main component ───────────────────────────────────── */
 
-export default function AdminDashboard({ addOpen = false, onAddClose }: { addOpen?: boolean; onAddClose?: () => void }) {
+export default function AdminDashboard({ addOpen = false, onAddClose, searchQuery = '' }: { addOpen?: boolean; onAddClose?: () => void; searchQuery?: string }) {
   const [locations] = useState<Location[]>(() => {
     const saved = localStorage.getItem('eque_locations');
     if (saved) return JSON.parse(saved);
@@ -236,7 +237,12 @@ export default function AdminDashboard({ addOpen = false, onAddClose }: { addOpe
   const openEdit = (device: Device) => setEditingDevice({ ...device });
 
   const handleToggleActive = (device: Device) => {
-    saveDevices(devices.map(d => d.id === device.id ? { ...d, active: !d.active } : d));
+    if (device.active) {
+      if (!window.confirm(`Czy na pewno chcesz dezaktywować tablet "${device.name || 'bez nazwy'}"? Zostanie odłączony od przypisanej lokalizacji.`)) return;
+      saveDevices(devices.map(d => d.id === device.id ? { ...d, active: false, locationId: '' } : d));
+    } else {
+      saveDevices(devices.map(d => d.id === device.id ? { ...d, active: true } : d));
+    }
   };
 
   const handleSimulateScan = () => {
@@ -248,7 +254,12 @@ export default function AdminDashboard({ addOpen = false, onAddClose }: { addOpe
 
   const handleSaveEdit = () => {
     if (!editingDevice) return;
-    saveDevices(devices.map(d => d.id === editingDevice.id ? editingDevice : d));
+    /* only one tablet may belong to a location — bump any other tablet that already had it */
+    saveDevices(devices.map(d => {
+      if (d.id === editingDevice.id) return editingDevice;
+      if (editingDevice.locationId && d.locationId === editingDevice.locationId) return { ...d, locationId: '' };
+      return d;
+    }));
     setEditingDevice(null);
   };
 
@@ -261,16 +272,22 @@ export default function AdminDashboard({ addOpen = false, onAddClose }: { addOpe
 
   const getLocationName = (locId: string) => locations.find(l => l.id === locId)?.name ?? '';
 
+  const visibleDevices = searchQuery.trim()
+    ? devices.filter(d => d.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : devices;
+
   /* ── render ────────────────────────────────────────── */
   return (
     <div>
-      {devices.length === 0 ? (
+      {visibleDevices.length === 0 ? (
         <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)', padding: 40, textAlign: 'center' }}>
-          <p style={{ fontFamily: 'var(--font-ui)', color: 'var(--text-muted)', fontSize: 15, margin: 0 }}>Brak dodanych tabletów.</p>
+          <p style={{ fontFamily: 'var(--font-ui)', color: 'var(--text-muted)', fontSize: 15, margin: 0 }}>
+            {devices.length === 0 ? 'Brak dodanych tabletów.' : 'Brak tabletów pasujących do wyszukiwania.'}
+          </p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
-          {devices.map(device => {
+          {visibleDevices.map(device => {
             const nameMissing = !device.name;
             const locMissing = !device.locationId;
             const deviceSim = sim[device.id] ?? initSim();
@@ -427,13 +444,26 @@ export default function AdminDashboard({ addOpen = false, onAddClose }: { addOpe
                 <select
                   style={inputStyle}
                   value={editingDevice.locationId}
+                  disabled={!editingDevice.active}
                   onChange={e => setEditingDevice({ ...editingDevice, locationId: e.target.value })}
                   onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
                   onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
                 >
                   <option value="">Nieprzypisany do żadnej lokalizacji</option>
-                  {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                  {locations.filter(loc => loc.active ?? true).map(loc => {
+                    const occupant = devices.find(d => d.locationId === loc.id && d.id !== editingDevice.id);
+                    return (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}{occupant ? ` (zastąpi: ${occupant.name || 'tablet bez nazwy'})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
+                {!editingDevice.active && (
+                  <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--text-faint)', margin: '6px 0 0' }}>
+                    Aktywuj tablet, aby przypisać go do lokalizacji.
+                  </p>
+                )}
               </Field>
             </div>
           );

@@ -172,8 +172,10 @@ export default function AdminHome({ userName }: { userName?: string }) {
 
   const issues = useMemo(() => {
     const list: string[] = [];
-    const unnamedDevices = devices.filter(d => !d.name).length;
-    const unassignedDevices = devices.filter(d => !d.locationId).length;
+    /* deactivated tablets are intentionally unassigned (cascade clears their
+       location on deactivation) — only flag active ones missing config */
+    const unnamedDevices = activeDevices.filter(d => !d.name).length;
+    const unassignedDevices = activeDevices.filter(d => !d.locationId).length;
     const tabletlessActiveLocations = activeLocations.filter(l => !devices.some(d => d.locationId === l.id)).length;
     const deactivatedUsers = users.filter(u => !(u.active ?? true)).length;
 
@@ -182,7 +184,7 @@ export default function AdminHome({ userName }: { userName?: string }) {
     if (tabletlessActiveLocations > 0) list.push(`${tabletlessActiveLocations} ${tabletlessActiveLocations === 1 ? 'aktywna lokalizacja bez tabletu' : 'aktywnych lokalizacji bez tabletu'}`);
     if (deactivatedUsers > 0) list.push(`${deactivatedUsers} ${deactivatedUsers === 1 ? 'dezaktywowane konto' : 'dezaktywowanych kont'}`);
     return list;
-  }, [devices, activeLocations, users]);
+  }, [devices, activeDevices, activeLocations, users]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -208,7 +210,8 @@ export default function AdminHome({ userName }: { userName?: string }) {
               <p style={{ fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>Brak dodanych lokalizacji.</p>
             )}
             {locations.map((loc, i) => {
-              const tabletCount = devices.filter(d => d.locationId === loc.id).length;
+              const tablet = devices.find(d => d.locationId === loc.id);
+              const tabletLabel = tablet ? (tablet.name || 'Tablet bez nazwy') : 'Brak tabletu';
               const userCount = (loc.userIds ?? []).length;
               const active = loc.active ?? true;
               return (
@@ -224,8 +227,11 @@ export default function AdminHome({ userName }: { userName?: string }) {
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                    <span style={{ fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--text-faint)' }}>
-                      {tabletCount} tab. · {userCount} os.
+                    <span style={{
+                      fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--text-faint)',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220,
+                    }}>
+                      {tabletLabel} · {userCount} os.
                     </span>
                     <MiniBadge tone={active ? 'success' : 'neutral'}>{active ? 'Aktywna' : 'Dezaktywowana'}</MiniBadge>
                   </div>

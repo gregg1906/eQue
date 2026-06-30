@@ -128,7 +128,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
               </div>
 
               {error && (
-                <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, color: '#E5484D', textAlign: 'center', margin: 0 }}>
+                <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--red-500)', textAlign: 'center', margin: 0 }}>
                   {error}
                 </p>
               )}

@@ -17,6 +17,7 @@ interface Location {
   id: string;
   name: string;
   userIds: string[];
+  active?: boolean;
 }
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -161,7 +162,7 @@ const btnSecondary: React.CSSProperties = {
   fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14.5, cursor: 'pointer',
 };
 const btnDanger: React.CSSProperties = {
-  background: '#FEF2F2', color: '#CE363B', border: '1.5px solid #FEE2E2',
+  background: 'var(--red-50)', color: 'var(--red-600)', border: '1.5px solid var(--red-100)',
   borderRadius: 'var(--radius-md)', padding: '10px 20px',
   fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14.5, cursor: 'pointer',
 };
@@ -220,14 +221,14 @@ const DEFAULT_USERS: UserData[] = [
 
 /* ── main component ───────────────────────────────────── */
 
-export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }: { addOpen?: boolean; onAddClose?: () => void }) {
+export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose, searchQuery = '' }: { addOpen?: boolean; onAddClose?: () => void; searchQuery?: string }) {
   const [locations, setLocations] = useState<Location[]>(() => {
     const saved = localStorage.getItem('eque_locations');
     if (saved) return JSON.parse(saved);
     return [
-      { id: 'loc1', name: 'Hol Główny',              userIds: ['usr1', 'usr2'] },
-      { id: 'loc2', name: 'Okienko Rejestracji 1',   userIds: ['usr2'] },
-      { id: 'loc3', name: 'Gabinet Kardiologiczny 12', userIds: ['usr1', 'usr3'] },
+      { id: 'loc1', name: 'Hol Główny',              userIds: ['usr1', 'usr2'], active: true },
+      { id: 'loc2', name: 'Okienko Rejestracji 1',   userIds: ['usr2'], active: true },
+      { id: 'loc3', name: 'Gabinet Kardiologiczny 12', userIds: ['usr1', 'usr3'], active: true },
     ];
   });
 
@@ -327,12 +328,22 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
   };
 
   const handleToggleActive = (user: UserData) => {
-    saveUsers(users.map(u => u.id === user.id ? { ...u, active: !u.active } : u));
+    if (user.active) {
+      if (!window.confirm(`Czy na pewno chcesz dezaktywować konto "${user.fullName}"? Zostanie odłączone od przypisanych lokalizacji.`)) return;
+      saveUsers(users.map(u => u.id === user.id ? { ...u, active: false, locationIds: [] } : u));
+      saveLocations(locations.map(l => ({ ...l, userIds: (l.userIds ?? []).filter(id => id !== user.id) })));
+    } else {
+      saveUsers(users.map(u => u.id === user.id ? { ...u, active: true } : u));
+    }
   };
 
   /* fix 1: all locations for a user, comma-separated */
   const allLocationNames = (u: UserData) =>
     locations.filter(l => u.locationIds.includes(l.id)).map(l => l.name);
+
+  const visibleUsers = searchQuery.trim()
+    ? users.filter(u => u.fullName.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : users;
 
   /* ── render ────────────────────────────────────────── */
   return (
@@ -350,13 +361,13 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
           <span>Pracownik</span><span>Lokalizacja</span><span>Rola</span><span>Status</span><span></span>
         </div>
 
-        {users.length === 0 && (
+        {visibleUsers.length === 0 && (
           <div style={{ padding: 36, textAlign: 'center', fontFamily: 'var(--font-ui)', color: 'var(--text-muted)', fontSize: 15 }}>
-            Brak dodanych pracowników.
+            {users.length === 0 ? 'Brak dodanych pracowników.' : 'Brak pracowników pasujących do wyszukiwania.'}
           </div>
         )}
 
-        {users.map((user, i) => {
+        {visibleUsers.map((user, i) => {
           const status = statuses[user.id] ?? 'offline';
           const locNames = allLocationNames(user); // fix 1: all locations
           const isAdmin = user.systemRole === 'Admin';
@@ -374,7 +385,7 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
                 display: 'grid', gridTemplateColumns: '2fr 1.4fr 0.9fr 1fr 96px',
                 gap: 12, alignItems: 'center', padding: '17px 24px',
                 background: user.active ? 'transparent' : 'var(--surface-sunken)',
-                borderBottom: i < users.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                borderBottom: i < visibleUsers.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                 transition: 'background var(--dur-base) var(--ease-out)',
               }}
             >
@@ -602,34 +613,43 @@ export default function AdminUsers({ addOpen: addPanelOpen = false, onAddClose }
             </Field>
 
             {/* fix 2: hide location checkboxes for admins */}
-            {editUser.systemRole === 'Operator' && (
-              <Field label="Przypisane lokalizacje">
-                <div style={{ border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                  {locations.map((loc, i) => (
-                    <label key={loc.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '12px 16px', cursor: 'pointer',
-                      borderBottom: i < locations.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                      background: editUser.locationIds.includes(loc.id) ? 'var(--brand-subtle)' : 'transparent',
-                    }}>
-                      <input type="checkbox"
-                        checked={editUser.locationIds.includes(loc.id)}
-                        onChange={e => {
-                          const ids = e.target.checked
-                            ? [...editUser.locationIds, loc.id]
-                            : editUser.locationIds.filter(id => id !== loc.id);
-                          setEditUser({ ...editUser, locationIds: ids });
-                        }}
-                        style={{ accentColor: 'var(--brand)', width: 16, height: 16 }} />
-                      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14.5, fontWeight: 600, color: 'var(--text-body)' }}>{loc.name}</span>
-                    </label>
-                  ))}
-                  {locations.length === 0 && (
-                    <div style={{ padding: 16, fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-muted)' }}>Brak dostępnych lokalizacji</div>
+            {editUser.systemRole === 'Operator' && (() => {
+              const assignableLocations = locations.filter(l => l.active ?? true);
+              return (
+                <Field label="Przypisane lokalizacje">
+                  {!editUser.active ? (
+                    <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>
+                      Aktywuj konto, aby przypisać lokalizacje.
+                    </p>
+                  ) : (
+                    <div style={{ border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                      {assignableLocations.map((loc, i) => (
+                        <label key={loc.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          padding: '12px 16px', cursor: 'pointer',
+                          borderBottom: i < assignableLocations.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                          background: editUser.locationIds.includes(loc.id) ? 'var(--brand-subtle)' : 'transparent',
+                        }}>
+                          <input type="checkbox"
+                            checked={editUser.locationIds.includes(loc.id)}
+                            onChange={e => {
+                              const ids = e.target.checked
+                                ? [...editUser.locationIds, loc.id]
+                                : editUser.locationIds.filter(id => id !== loc.id);
+                              setEditUser({ ...editUser, locationIds: ids });
+                            }}
+                            style={{ accentColor: 'var(--brand)', width: 16, height: 16 }} />
+                          <span style={{ fontFamily: 'var(--font-ui)', fontSize: 14.5, fontWeight: 600, color: 'var(--text-body)' }}>{loc.name}</span>
+                        </label>
+                      ))}
+                      {assignableLocations.length === 0 && (
+                        <div style={{ padding: 16, fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-muted)' }}>Brak dostępnych lokalizacji</div>
+                      )}
+                    </div>
                   )}
-                </div>
-              </Field>
-            )}
+                </Field>
+              );
+            })()}
 
             {/* fix 2: info for admin */}
             {editUser.systemRole === 'Admin' && (

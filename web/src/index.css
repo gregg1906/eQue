@@ -99,4 +99,68 @@ body {
   font-family: var(--font-ui);
   background: var(--surface-page);
   color: var(--text-body);
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+@keyframes eque-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   Dark theme — overrides the raw color ladder + the few tokens
+   that aren't derived from it. Every component reads colors
+   through these custom properties, so this block is the whole
+   theme switch: no component-level dark-mode branching needed.
+   ============================================================ */
+:root[data-theme="dark"] {
+  /* Neutral: slate — inverted ladder (lightness reversed) */
+  --slate-0:   #0B0F12;
+  --slate-50:  #0F1417;
+  --slate-100: #1B232A;
+  --slate-200: #2A343C;
+  --slate-300: #3C4750;
+  --slate-400: #62707A;
+  --slate-500: #8C99A2;
+  --slate-600: #A9B4BB;
+  --slate-700: #CBD3D8;
+  --slate-800: #E2E7E9;
+  --slate-900: #F4F6F7;
+
+  /* Teal — keep brand fills vivid, soften tints, brighten text use */
+  --teal-50:  rgba(37, 199, 183, 0.12);
+  --teal-100: rgba(37, 199, 183, 0.20);
+  --teal-200: rgba(37, 199, 183, 0.34);
+  --teal-600: #3FDCC9;
+  --teal-700: #5EE6D6;
+
+  /* Amber */
+  --amber-50:  rgba(242, 166, 12, 0.12);
+  --amber-100: rgba(242, 166, 12, 0.22);
+  --amber-600: #F5B83D;
+  --amber-700: #FBCB6E;
+
+  /* Green */
+  --green-50:  rgba(22, 163, 74, 0.14);
+  --green-100: rgba(22, 163, 74, 0.24);
+  --green-600: #34D399;
+  --green-700: #6EE7B7;
+
+  /* Red */
+  --red-50:  rgba(229, 72, 77, 0.14);
+  --red-100: rgba(229, 72, 77, 0.24);
+  --red-600: #F47074;
+  --red-700: #FF9DA0;
+
+  /* Blue */
+  --blue-100: rgba(59, 130, 246, 0.22);
+  --blue-600: #7AAFFF;
+
+  /* Not derived from the slate ladder — needs its own value */
+  --surface-card: #171F24;
+
+  /* Shadows read against a dark backdrop, not a light one */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 6px rgba(0,0,0,0.35), 0 10px 28px rgba(0,0,0,0.45);
+
+  color-scheme: dark;
 }
