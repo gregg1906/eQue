@@ -3,29 +3,33 @@ import 'package:flutter/material.dart';
 import 'queue_status_screen.dart';
 
 class ScanScreen extends StatefulWidget {
-  final CameraDescription camera;
+  final CameraDescription? camera;
 
-  const ScanScreen({super.key, required this.camera});
+  const ScanScreen({super.key, this.camera});
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  late CameraController _controller;
-  late Future<void> _initializeControllerFuture;
+  CameraController? _controller;
+  Future<void>? _initializeControllerFuture;
   final TextEditingController _kodController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _controller = CameraController(widget.camera, ResolutionPreset.medium);
-    _initializeControllerFuture = _controller.initialize();
+    final camera = widget.camera;
+    if (camera != null) {
+      final controller = CameraController(camera, ResolutionPreset.medium);
+      _controller = controller;
+      _initializeControllerFuture = controller.initialize();
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     _kodController.dispose();
     super.dispose();
   }
@@ -46,7 +50,10 @@ class _ScanScreenState extends State<ScanScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Wprowadź kod ręcznie', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text(
+            'Wprowadź kod ręcznie',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           content: TextField(
             controller: _kodController,
             decoration: InputDecoration(
@@ -82,34 +89,46 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Zeskanuj kod QR'),
-      ),
+      appBar: AppBar(title: const Text('Zeskanuj kod QR')),
       body: Column(
         children: [
           Expanded(
-            child: FutureBuilder<void>(
-              future: _initializeControllerFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done) {
-                  return Center(
-                    child: Container(
-                      margin: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF1877F2), width: 3),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(13),
-                        child: CameraPreview(_controller),
+            child: _controller == null
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Brak dostępnej kamery. Wpisz kod ręcznie poniżej.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.black54),
                       ),
                     ),
-                  );
-                } else {
-                  return const Center(child: CircularProgressIndicator());
-                }
-              },
-            ),
+                  )
+                : FutureBuilder<void>(
+                    future: _initializeControllerFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.done) {
+                        return Center(
+                          child: Container(
+                            margin: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFF1877F2),
+                                width: 3,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(13),
+                              child: CameraPreview(_controller!),
+                            ),
+                          ),
+                        );
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
           ),
           Padding(
             padding: const EdgeInsets.all(24.0),
@@ -120,11 +139,19 @@ class _ScanScreenState extends State<ScanScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       side: const BorderSide(color: Color(0xFF1877F2)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     onPressed: _pokazOkienkoReczne,
                     icon: const Icon(Icons.keyboard, color: Color(0xFF1877F2)),
-                    label: const Text('Wpisz kod ręcznie', style: TextStyle(color: Color(0xFF1877F2), fontWeight: FontWeight.bold)),
+                    label: const Text(
+                      'Wpisz kod ręcznie',
+                      style: TextStyle(
+                        color: Color(0xFF1877F2),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],

@@ -5,35 +5,44 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'screens/home_screen.dart';
 
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
   );
-  
+
   await flutterLocalNotificationsPlugin.initialize(
     settings: initializationSettings,
   );
 
-  final cameras = await availableCameras();
-  final firstCamera = cameras.first;
+  CameraDescription? firstCamera;
+  try {
+    final cameras = await availableCameras();
+    if (cameras.isNotEmpty) {
+      firstCamera = cameras.first;
+    }
+  } catch (_) {
+    firstCamera = null;
+  }
 
   runApp(MyApp(camera: firstCamera));
 }
 
 class MyApp extends StatelessWidget {
-  final CameraDescription camera; 
-  
-  const MyApp({super.key, required this.camera});
+  final CameraDescription? camera;
+
+  const MyApp({super.key, this.camera});
 
   @override
   Widget build(BuildContext context) {
-    const primaryBlue = Color(0xFF1877F2); 
-    const bgColor = Color(0xFFF0F2F5);     
+    const primaryBlue = Color(0xFF1877F2);
+    const bgColor = Color(0xFFF0F2F5);
 
     return MaterialApp(
       title: 'eQue',
@@ -42,7 +51,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: bgColor,
         textTheme: GoogleFonts.nunitoTextTheme(Theme.of(context).textTheme),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: primaryBlue, 
+          seedColor: primaryBlue,
           primary: primaryBlue,
         ),
         appBarTheme: const AppBarTheme(
