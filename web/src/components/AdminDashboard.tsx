@@ -1,222 +1,386 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+type OnlineStatus = 'online' | 'offline';
 
 interface Device {
   id: string;
   name: string;
   locationId: string;
+  active: boolean;
 }
 
 interface Location {
   id: string;
   name: string;
+  active?: boolean;
 }
 
-export default function AdminDashboard() {
+interface SimState {
+  status: OnlineStatus;
+  code: string;
+}
+
+/* ── helpers ─────────────────────────────────────────── */
+
+function randomStatus(): OnlineStatus {
+  return Math.random() < 0.75 ? 'online' : 'offline';
+}
+
+function randomCode(): string {
+  const letters = ['A', 'B', 'C', 'D'];
+  const letter = letters[Math.floor(Math.random() * letters.length)];
+  const num = Math.floor(Math.random() * 150) + 1;
+  return `${letter}-${String(num).padStart(3, '0')}`;
+}
+
+function initSim(): SimState {
+  const status = randomStatus();
+  return { status, code: status === 'online' ? randomCode() : '—' };
+}
+
+/* ── sub-components ───────────────────────────────────── */
+
+function StatusBadge({ tone, children }: { tone: 'success' | 'danger' | 'neutral'; children: React.ReactNode }) {
+  const map = {
+    success: { fg: 'var(--green-700)', bg: 'var(--green-50)', bd: 'var(--green-100)', dot: 'var(--green-600)' },
+    danger:  { fg: 'var(--red-700)',   bg: 'var(--red-50)',   bd: 'var(--red-100)',   dot: 'var(--red-600)' },
+    neutral: { fg: 'var(--slate-700)', bg: 'var(--slate-100)', bd: 'var(--slate-200)', dot: 'var(--slate-500)' },
+  } as const;
+  const c = map[tone];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+      padding: '3px 10px', borderRadius: 'var(--radius-pill)',
+      fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600,
+      background: c.bg, color: c.fg, border: `1px solid ${c.bd}`, whiteSpace: 'nowrap',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, flexShrink: 0 }} />
+      {children}
+    </span>
+  );
+}
+
+function Switch({ checked, onChange, ariaLabel }: { checked: boolean; onChange: () => void; ariaLabel: string }) {
+  const w = 44, h = 24, k = 18;
+  return (
+    <button
+      role="switch" aria-checked={checked} aria-label={ariaLabel}
+      onClick={onChange}
+      style={{
+        position: 'relative', width: w, height: h, flexShrink: 0,
+        borderRadius: 'var(--radius-pill)', border: 'none', padding: 0,
+        background: checked ? 'var(--brand)' : 'var(--slate-300)',
+        cursor: 'pointer', transition: 'background var(--dur-base) var(--ease-out)',
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: (h - k) / 2,
+        left: checked ? w - k - (h - k) / 2 : (h - k) / 2,
+        width: k, height: k, borderRadius: '50%', background: '#fff',
+        boxShadow: 'var(--shadow-sm)', transition: 'left var(--dur-base) var(--ease-out)',
+      }} />
+    </button>
+  );
+}
+
+function EditIconButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Edytuj"
+      style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: 'var(--text-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 36, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0,
+        transition: 'background var(--dur-fast), color var(--dur-fast)',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-sunken)'; e.currentTarget.style.color = 'var(--text-body)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-faint)'; }}
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </svg>
+    </button>
+  );
+}
+
+function TabletIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="12" y1="18" x2="12.01" y2="18" />
+    </svg>
+  );
+}
+
+/* ── slide panel (matches AdminUsers) ─────────────────── */
+
+function SlidePanel({ title, open, onClose, children, footer }: {
+  title: string; open: boolean; onClose: () => void;
+  children: React.ReactNode; footer: React.ReactNode;
+}) {
+  return (
+    <>
+      {open && <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(12,16,19,0.45)' }} onClick={onClose} />}
+      <aside style={{
+        position: 'fixed', inset: '0 0 0 auto', zIndex: 50,
+        width: '100%', maxWidth: 440,
+        background: 'var(--surface-card)',
+        boxShadow: '0 18px 48px rgba(21,27,31,0.16)',
+        display: 'flex', flexDirection: 'column',
+        transform: open ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 250ms cubic-bezier(0.22,1,0.36,1)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 19, color: 'var(--text-strong)' }}>{title}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', display: 'flex', padding: 4, borderRadius: 'var(--radius-sm)' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>{children}</div>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 24px', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'var(--surface-sunken)' }}>
+          {footer}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <label style={labelStyle}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+/* ── shared styles ─────────────────────────────────────── */
+
+const btnPrimary: React.CSSProperties = {
+  background: 'var(--brand)', color: 'var(--on-brand)', border: 'none',
+  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+  fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 14.5, cursor: 'pointer',
+};
+const btnSecondary: React.CSSProperties = {
+  background: 'transparent', color: 'var(--text-body)',
+  border: '1.5px solid var(--border-default)',
+  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14.5, cursor: 'pointer',
+};
+const btnDanger: React.CSSProperties = {
+  background: 'var(--red-50)', color: 'var(--red-600)', border: '1.5px solid var(--red-100)',
+  borderRadius: 'var(--radius-md)', padding: '10px 20px',
+  fontFamily: 'var(--font-ui)', fontWeight: 600, fontSize: 14.5, cursor: 'pointer',
+};
+const inputStyle: React.CSSProperties = {
+  width: '100%', border: '1.5px solid var(--border-default)',
+  borderRadius: 'var(--radius-md)', padding: '11px 14px',
+  fontFamily: 'var(--font-ui)', fontSize: 15,
+  color: 'var(--text-strong)', background: 'var(--surface-card)',
+  outline: 'none', boxSizing: 'border-box',
+};
+const labelStyle: React.CSSProperties = {
+  display: 'block', marginBottom: 7,
+  fontFamily: 'var(--font-ui)', fontSize: 14, fontWeight: 600,
+  color: 'var(--text-body)',
+};
+
+/* ── main component ───────────────────────────────────── */
+
+export default function AdminDashboard({ addOpen = false, onAddClose, searchQuery = '' }: { addOpen?: boolean; onAddClose?: () => void; searchQuery?: string }) {
   const [locations] = useState<Location[]>(() => {
-    const savedLocations = localStorage.getItem('eque_locations');
-    if (savedLocations) return JSON.parse(savedLocations);
+    const saved = localStorage.getItem('eque_locations');
+    if (saved) return JSON.parse(saved);
     return [
       { id: 'loc1', name: 'Hol Główny' },
       { id: 'loc2', name: 'Okienko Rejestracji 1' },
-      { id: 'loc3', name: 'Gabinet Kardiologiczny 12' }
+      { id: 'loc3', name: 'Gabinet Kardiologiczny 12' },
     ];
   });
 
   const [devices, setDevices] = useState<Device[]>(() => {
-    const savedDevices = localStorage.getItem('eque_devices');
-    if (savedDevices) return JSON.parse(savedDevices);
-    return [
-      { id: 'dev1', name: 'Tablet Wejściowy', locationId: 'loc1' },
-      { id: 'dev2', name: 'Tablet Rejestracja', locationId: 'loc2' },
-      { id: 'dev3', name: 'Kiosk Kardiologia', locationId: 'loc3' },
+    const saved = localStorage.getItem('eque_devices');
+    const parsed: Device[] = saved ? JSON.parse(saved) : [
+      { id: 'dev1', name: 'Tablet Wejściowy', locationId: 'loc1', active: true },
+      { id: 'dev2', name: 'Tablet Rejestracja', locationId: 'loc2', active: true },
+      { id: 'dev3', name: 'Kiosk Kardiologia', locationId: 'loc3', active: true },
     ];
+    return parsed.map(d => ({ ...d, active: d.active ?? true }));
   });
-  
-  const [isPopupOpen, setIsPopupOpen] = useState(false);
+
+  /* simulated online/offline + current code — one random flip every 8s, active devices only */
+  const [sim, setSim] = useState<Record<string, SimState>>(() =>
+    Object.fromEntries(devices.map(d => [d.id, initSim()]))
+  );
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSim(prev => {
+        const activeDevices = devices.filter(d => d.active);
+        if (activeDevices.length === 0) return prev;
+        const target = activeDevices[Math.floor(Math.random() * activeDevices.length)];
+        return { ...prev, [target.id]: initSim() };
+      });
+    }, 8000);
+    return () => clearInterval(id);
+  }, [devices]);
+
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
 
+  const saveDevices = (updated: Device[]) => {
+    setDevices(updated);
+    localStorage.setItem('eque_devices', JSON.stringify(updated));
+  };
+
+  const openEdit = (device: Device) => setEditingDevice({ ...device });
+
+  const handleToggleActive = (device: Device) => {
+    if (device.active) {
+      if (!window.confirm(`Czy na pewno chcesz dezaktywować tablet "${device.name || 'bez nazwy'}"? Zostanie odłączony od przypisanej lokalizacji.`)) return;
+      saveDevices(devices.map(d => d.id === device.id ? { ...d, active: false, locationId: '' } : d));
+    } else {
+      saveDevices(devices.map(d => d.id === device.id ? { ...d, active: true } : d));
+    }
+  };
+
   const handleSimulateScan = () => {
-    const newDevice: Device = {
-      id: Date.now().toString(),
-      name: '',
-      locationId: '',
-    };
-    
-    const updatedDevices = [...devices, newDevice];
-    setDevices(updatedDevices);
-    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
-    setIsPopupOpen(false);
+    const newDevice: Device = { id: Date.now().toString(), name: '', locationId: '', active: true };
+    saveDevices([...devices, newDevice]);
+    setSim(prev => ({ ...prev, [newDevice.id]: initSim() }));
+    onAddClose?.();
   };
 
   const handleSaveEdit = () => {
     if (!editingDevice) return;
-
-    const updatedDevices = devices.map(d => d.id === editingDevice.id ? editingDevice : d);
-    setDevices(updatedDevices);
-    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
+    /* only one tablet may belong to a location — bump any other tablet that already had it */
+    saveDevices(devices.map(d => {
+      if (d.id === editingDevice.id) return editingDevice;
+      if (editingDevice.locationId && d.locationId === editingDevice.locationId) return { ...d, locationId: '' };
+      return d;
+    }));
     setEditingDevice(null);
   };
 
   const handleDeleteDevice = () => {
     if (!editingDevice) return;
-    if (!window.confirm(`Czy na pewno chcesz usunąć tablet "${editingDevice.name || 'bez nazwy'}"? Tej operacji nie można cofnąć.`)) return;
-
-    const updatedDevices = devices.filter(d => d.id !== editingDevice.id);
-    setDevices(updatedDevices);
-    localStorage.setItem('eque_devices', JSON.stringify(updatedDevices));
+    if (!window.confirm(`Czy na pewno chcesz usunąć tablet "${editingDevice.name || 'bez nazwy'}"?`)) return;
+    saveDevices(devices.filter(d => d.id !== editingDevice.id));
     setEditingDevice(null);
   };
 
-  const getLocationName = (locId: string) => {
-    const loc = locations.find(l => l.id === locId);
-    return loc ? loc.name : '';
-  };
+  const getLocationName = (locId: string) => locations.find(l => l.id === locId)?.name ?? '';
 
-  if (editingDevice) {
-    return (
-      <div className="mx-auto max-w-2xl animate-fade-in">
-        <button 
-          onClick={() => setEditingDevice(null)}
-          className="mb-6 flex items-center text-sm font-semibold text-gray-500 transition-colors hover:text-gray-800"
-        >
-          <svg className="mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Wróć do listy tabletów
-        </button>
+  const visibleDevices = searchQuery.trim()
+    ? devices.filter(d => d.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : devices;
 
-        <div className="rounded-xl bg-white p-8 shadow-sm border border-gray-200">
-          <h2 className="mb-6 text-2xl font-bold text-gray-800">Edycja tabletu</h2>
-          
-          <div className="flex flex-col space-y-5">
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Nazwa urządzenia</label>
-              <input
-                type="text"
-                value={editingDevice.name}
-                onChange={(e) => setEditingDevice({ ...editingDevice, name: e.target.value })}
-                placeholder="np. Tablet Rejestracja"
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-gray-700">Przypisana lokalizacja</label>
-              <select
-                value={editingDevice.locationId}
-                onChange={(e) => setEditingDevice({ ...editingDevice, locationId: e.target.value })}
-                className="w-full rounded-md border border-gray-300 p-3 outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] bg-white"
-              >
-                <option value="">Nieprzypisany do żadnej lokacji</option>
-                {locations.map(loc => (
-                  <option key={loc.id} value={loc.id}>{loc.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-6">
-            <button
-              onClick={handleDeleteDevice}
-              className="rounded-md border border-red-200 bg-red-50 px-6 py-2.5 font-semibold text-red-600 transition-colors hover:bg-red-100"
-            >
-              Usuń tablet
-            </button>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setEditingDevice(null)}
-                className="rounded-md bg-white border border-gray-300 px-6 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="rounded-md bg-[#1877f2] px-6 py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
-              >
-                Zapisz zmiany
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  /* ── render ────────────────────────────────────────── */
   return (
-    <div className="relative animate-fade-in">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-800">Zarządzanie tabletami</h2>
-        <button
-          onClick={() => setIsPopupOpen(true)}
-          className="rounded-md bg-[#1877f2] px-4 py-2 font-semibold text-white transition-colors hover:bg-[#166fe5]"
-        >
-          + Dodaj urządzenie
-        </button>
-      </div>
+    <div>
+      {visibleDevices.length === 0 ? (
+        <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)', padding: 40, textAlign: 'center' }}>
+          <p style={{ fontFamily: 'var(--font-ui)', color: 'var(--text-muted)', fontSize: 15, margin: 0 }}>
+            {devices.length === 0 ? 'Brak dodanych tabletów.' : 'Brak tabletów pasujących do wyszukiwania.'}
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
+          {visibleDevices.map(device => {
+            const nameMissing = !device.name;
+            const locMissing = !device.locationId;
+            const deviceSim = sim[device.id] ?? initSim();
+            const isOnline = deviceSim.status === 'online';
+            const displayCode = device.active && isOnline ? deviceSim.code : '—';
 
-      <div className="overflow-hidden rounded-xl bg-white shadow-sm border border-gray-200">
-        <ul className="divide-y divide-gray-100">
-          {devices.map((device) => {
-            const isNameMissing = !device.name || device.name.startsWith('Nowy Tablet (');
-            const isLocMissing = !device.locationId;
-            
+            const badge = !device.active
+              ? { tone: 'neutral' as const, label: 'Dezaktywowany' }
+              : isOnline
+                ? { tone: 'success' as const, label: 'Online' }
+                : { tone: 'danger' as const, label: 'Offline' };
+
             return (
-              <li key={device.id}>
-                <button 
-                  onClick={() => setEditingDevice(device)}
-                  className="group flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-blue-50"
-                >
-                  <div>
-                    <p className={`font-semibold transition-colors group-hover:text-[#1877f2] ${isNameMissing ? 'text-red-500' : 'text-gray-800'}`}>
-                      {isNameMissing ? 'Nazwa nie została ustawiona' : device.name}
-                    </p>
-                    <p className={`text-sm ${isLocMissing ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
-                      Lokalizacja: {isLocMissing ? 'Nieprzypisany do żadnej lokacji' : getLocationName(device.locationId)}
-                    </p>
+              <div key={device.id} style={{
+                background: device.active ? 'var(--surface-card)' : 'var(--surface-sunken)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)', padding: 20,
+                transition: 'background var(--dur-base) var(--ease-out)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ display: 'flex', gap: 14, minWidth: 0 }}>
+                    <div style={{
+                      width: 46, height: 46, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                      background: device.active ? 'var(--brand-subtle)' : 'var(--surface-sunken)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: device.active ? 'var(--text-brand)' : 'var(--text-faint)',
+                    }}>
+                      <TabletIcon />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 15.5,
+                        color: nameMissing ? 'var(--red-600)' : 'var(--text-strong)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {nameMissing ? 'Nazwa nie została ustawiona' : device.name}
+                      </div>
+                      <div style={{
+                        fontFamily: 'var(--font-ui)', fontSize: 13, marginTop: 2,
+                        color: locMissing ? 'var(--red-600)' : 'var(--text-muted)',
+                      }}>
+                        {locMissing ? 'Brak przypisanej lokalizacji' : getLocationName(device.locationId)}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <svg 
-                      className="h-5 w-5 text-gray-400 transition-colors group-hover:text-[#1877f2]" 
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+                </div>
+
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border-subtle)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 13 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                     </svg>
+                    Aktualny kod:
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--text-strong)', fontVariantNumeric: 'tabular-nums' }}>
+                      {displayCode}
+                    </span>
                   </div>
-                </button>
-              </li>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Switch checked={device.active} onChange={() => handleToggleActive(device)} ariaLabel={device.active ? 'Dezaktywuj tablet' : 'Aktywuj tablet'} />
+                    <EditIconButton onClick={() => openEdit(device)} />
+                  </div>
+                </div>
+              </div>
             );
           })}
-          {devices.length === 0 && (
-            <li className="p-6 text-center text-gray-500">Brak dodanych urządzeń.</li>
-          )}
-        </ul>
-      </div>
+        </div>
+      )}
 
-      {isPopupOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
-            <h3 className="mb-2 text-center text-xl font-bold text-gray-800">Skonfiguruj nowe urządzenie</h3>
-            <p className="mb-6 text-center text-sm text-gray-500">
-              Uruchom aplikację eQue na nowym tablecie i zeskanuj poniższy kod, aby połączyć je z systemem.
+      {/* ── Add device modal (simulated QR scan) ─────────── */}
+      {addOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(12,16,19,0.55)', padding: 16 }}>
+          <div style={{ width: '100%', maxWidth: 360, background: 'var(--surface-card)', borderRadius: 'var(--radius-xl)', padding: 28, boxShadow: '0 18px 48px rgba(21,27,31,0.16)' }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: 'var(--text-strong)', textAlign: 'center', marginBottom: 6 }}>Skonfiguruj nowe urządzenie</h3>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 24 }}>
+              Uruchom aplikację eQue na nowym tablecie i zeskanuj poniższy kod QR.
             </p>
-            
-            <div className="mx-auto mb-8 flex h-48 w-48 items-center justify-center rounded-lg border-4 border-dashed border-gray-300 bg-gray-50">
-              <svg className="h-24 w-24 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 3h6v6H3V3zm12 0h6v6h-6V3zM3 15h6v6H3v-6zm12 0h6v6h-6v-6z" />
+            <div style={{ margin: '0 auto 28px', width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-md)', border: '2px dashed var(--border-default)', background: 'var(--surface-sunken)' }}>
+              <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" strokeWidth="1">
+                <path d="M3 3h6v6H3V3zm12 0h6v6h-6V3zM3 15h6v6H3v-6zm12 0h6v6h-6v-6z" />
               </svg>
             </div>
-
-            <div className="flex justify-between space-x-3">
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={{ ...btnSecondary, flex: 1 }} onClick={onAddClose}>Wstecz</button>
               <button
-                onClick={() => setIsPopupOpen(false)}
-                className="flex-1 rounded-md bg-gray-200 py-2.5 font-semibold text-gray-700 transition-colors hover:bg-gray-300"
-              >
-                Wstecz
-              </button>
-              <button
+                style={{ ...btnPrimary, flex: 1 }}
                 onClick={handleSimulateScan}
-                className="flex-1 rounded-md bg-[#1877f2] py-2.5 font-semibold text-white transition-colors hover:bg-[#166fe5]"
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--brand)'; }}
               >
                 Zeskanowano
               </button>
@@ -224,6 +388,87 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── Edit panel ────────────────────────────────── */}
+      <SlidePanel title="Edytuj tablet" open={!!editingDevice} onClose={() => setEditingDevice(null)} footer={
+        <>
+          <button style={btnDanger} onClick={handleDeleteDevice}>Usuń</button>
+          <button style={{ ...btnPrimary, marginLeft: 'auto' }} onClick={handleSaveEdit}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand)'; }}>
+            Zapisz
+          </button>
+        </>
+      }>
+        {editingDevice && (() => {
+          const editSim = sim[editingDevice.id] ?? initSim();
+          const editIsOnline = editSim.status === 'online';
+          const editBadge = !editingDevice.active
+            ? { tone: 'neutral' as const, label: 'Dezaktywowany' }
+            : editIsOnline
+              ? { tone: 'success' as const, label: 'Online' }
+              : { tone: 'danger' as const, label: 'Offline' };
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--surface-sunken)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 'var(--radius-md)', flexShrink: 0,
+                  background: editingDevice.active ? 'var(--brand-subtle)' : 'var(--surface-card)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: editingDevice.active ? 'var(--text-brand)' : 'var(--text-faint)',
+                }}>
+                  <TabletIcon size={24} />
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, fontSize: 16, color: 'var(--text-strong)' }}>
+                    {editingDevice.name || 'Tablet bez nazwy'}
+                  </div>
+                  <div style={{ marginTop: 5 }}>
+                    <StatusBadge tone={editBadge.tone}>{editBadge.label}</StatusBadge>
+                  </div>
+                </div>
+              </div>
+
+              <Field label="Nazwa urządzenia">
+                <input
+                  type="text" style={inputStyle}
+                  value={editingDevice.name}
+                  onChange={e => setEditingDevice({ ...editingDevice, name: e.target.value })}
+                  placeholder="np. Tablet Rejestracja"
+                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+                />
+              </Field>
+
+              <Field label="Przypisana lokalizacja">
+                <select
+                  style={inputStyle}
+                  value={editingDevice.locationId}
+                  disabled={!editingDevice.active}
+                  onChange={e => setEditingDevice({ ...editingDevice, locationId: e.target.value })}
+                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+                >
+                  <option value="">Nieprzypisany do żadnej lokalizacji</option>
+                  {locations.filter(loc => loc.active ?? true).map(loc => {
+                    const occupant = devices.find(d => d.locationId === loc.id && d.id !== editingDevice.id);
+                    return (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}{occupant ? ` (zastąpi: ${occupant.name || 'tablet bez nazwy'})` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                {!editingDevice.active && (
+                  <p style={{ fontFamily: 'var(--font-ui)', fontSize: 12.5, color: 'var(--text-faint)', margin: '6px 0 0' }}>
+                    Aktywuj tablet, aby przypisać go do lokalizacji.
+                  </p>
+                )}
+              </Field>
+            </div>
+          );
+        })()}
+      </SlidePanel>
     </div>
   );
 }

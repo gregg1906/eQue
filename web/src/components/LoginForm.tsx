@@ -8,19 +8,32 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    if (username === 'admin' && password === 'admin123') {
-      onLoginSuccess('admin', 'Administrator');
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('eque_token', data.access_token);
+      setLoading(false);
+      onLoginSuccess('admin', username);
       return;
     }
 
     const savedUsers = localStorage.getItem('eque_users');
     const users: { fullName: string; password: string }[] = savedUsers ? JSON.parse(savedUsers) : [];
     const match = users.find(u => u.fullName === username && u.password === password && u.password);
+
+    setLoading(false);
 
     if (match) {
       onLoginSuccess('user', match.fullName);
@@ -30,54 +43,117 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f0f2f5] px-4">
-      <div className="flex w-full max-w-5xl flex-col lg:flex-row lg:items-center lg:justify-between lg:space-x-12">
-        
-        <div className="mb-10 text-center lg:mb-0 lg:w-1/2 lg:text-left">
-          <h1 className="text-5xl font-bold text-[#1877f2] lg:text-6xl mb-4">
-            eQue
-          </h1>
-          <p className="text-2xl text-gray-700">
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-page)', padding: '16px' }}>
+      <div style={{ display: 'flex', width: '100%', maxWidth: 960, alignItems: 'center', gap: 80 }}>
+
+        <div style={{ flex: 1, display: 'none' }} className="lg:block">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+            <img src="/logo-mark.svg" width="52" height="52" alt="eQue" />
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 38, letterSpacing: '-0.02em', color: 'var(--text-strong)' }}>
+              eQue
+            </span>
+          </div>
+          <p style={{ fontFamily: 'var(--font-ui)', fontSize: 20, color: 'var(--text-body)', lineHeight: 1.5, maxWidth: 380 }}>
             Zarządzaj kolejkami w swojej placówce szybko i wygodnie.
           </p>
         </div>
 
-        <div className="mx-auto w-full max-w-md lg:w-1/2">
-          <div className="rounded-xl bg-white p-8 shadow-lg">
-            <form onSubmit={handleLogin} className="flex flex-col space-y-4">
-              <input
-                type="text"
-                placeholder="Nazwa użytkownika (admin)"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="rounded-md border border-gray-300 p-3.5 text-lg outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
-                required
-              />
-              <input
-                type="password"
-                placeholder="Hasło (admin123)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="rounded-md border border-gray-300 p-3.5 text-lg outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2]"
-                required
-              />
-              
+        <div style={{ width: '100%', maxWidth: 420, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28, justifyContent: 'center' }}>
+            <img src="/logo-mark.svg" width="40" height="40" alt="eQue" />
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 28, letterSpacing: '-0.02em', color: 'var(--text-strong)' }}>
+              eQue
+            </span>
+          </div>
+
+          <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', padding: 32 }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 22, color: 'var(--text-strong)', marginBottom: 6 }}>
+              Zaloguj się
+            </h2>
+            <p style={{ fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-muted)', marginBottom: 24 }}>
+              Panel przeznaczony wyłącznie dla personelu.
+            </p>
+
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, fontWeight: 600, color: 'var(--text-body)' }}>
+                  Nazwa użytkownika
+                </label>
+                <input
+                  type="text"
+                  placeholder="admin"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  style={{
+                    border: '1.5px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '11px 14px',
+                    fontSize: 15,
+                    fontFamily: 'var(--font-ui)',
+                    color: 'var(--text-strong)',
+                    background: 'var(--surface-card)',
+                    outline: 'none',
+                    transition: 'border-color var(--dur-fast)',
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, fontWeight: 600, color: 'var(--text-body)' }}>
+                  Hasło
+                </label>
+                <input
+                  type="password"
+                  placeholder="admin123"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{
+                    border: '1.5px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '11px 14px',
+                    fontSize: 15,
+                    fontFamily: 'var(--font-ui)',
+                    color: 'var(--text-strong)',
+                    background: 'var(--surface-card)',
+                    outline: 'none',
+                    transition: 'border-color var(--dur-fast)',
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--focus-ring)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+                />
+              </div>
+
               {error && (
-                <p className="text-center text-sm text-red-500">{error}</p>
+                <p style={{ fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--red-500)', textAlign: 'center', margin: 0 }}>
+                  {error}
+                </p>
               )}
 
               <button
                 type="submit"
-                className="rounded-md bg-[#1877f2] py-3 text-xl font-bold text-white transition-colors hover:bg-[#166fe5]"
+                disabled={loading}
+                style={{
+                  marginTop: 6,
+                  background: loading ? 'var(--brand-hover)' : 'var(--brand)',
+                  color: 'var(--on-brand)',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '13px',
+                  fontSize: 15.5,
+                  fontFamily: 'var(--font-ui)',
+                  fontWeight: 700,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  transition: 'background var(--dur-fast) var(--ease-out)',
+                }}
+                onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = 'var(--brand-hover)'; }}
+                onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = 'var(--brand)'; }}
               >
-                Zaloguj się
+                {loading ? 'Logowanie…' : 'Zaloguj się'}
               </button>
-              
-              <div className="my-4 border-b border-gray-200"></div>
-              
-              <p className="text-center text-sm text-gray-500">
-                System eQue przeznaczony jest wyłącznie dla personelu.
-              </p>
             </form>
           </div>
         </div>
