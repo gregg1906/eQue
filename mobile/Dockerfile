@@ -1,5 +1,5 @@
 # Wykorzystujemy oficjalny obraz z preinstalowanym Flutterem
-FROM ghcr.io/cirruslabs/flutter:3.19.0 AS dev
+FROM ghcr.io/cirruslabs/flutter:stable AS dev
 
 WORKDIR /app
 
