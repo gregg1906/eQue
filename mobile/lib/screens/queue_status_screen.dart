@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert'; // Potrzebne do obsługi JSON (jsonDecode, jsonEncode)
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http; // Potrzebne do zapytania startowego HTTP
 import '../main.dart'; 
+import '../services/queue_socket_service.dart';
 
 class QueueStatusScreen extends StatefulWidget {
   final String numerBiletu;
@@ -13,44 +16,95 @@ class QueueStatusScreen extends StatefulWidget {
 }
 
 class _QueueStatusScreenState extends State<QueueStatusScreen> {
-  Timer? _odliczanie;
-  final int _czasNaOsobeWSekundach = 15;
-  int _czasObecnejOsobyWSekundach = 0;
-  int _osobyPrzedNami = 3;
-  int _poczatkoweOsoby = 3;
+  final QueueSocketService _socketService = QueueSocketService();
+  StreamSubscription? _socketSubscription;
+
+  // Wyzerowane zmienne stanu - zostaną nadpisane przez serwer
+  int _osobyPrzedNami = 0;
+  int _poczatkoweOsoby = 0;
+  int _szacowanyCzasMinuty = 0;
+  
+  bool _isLoading = true; // Flaga stanu ładowania z API
+  String? _errorMessage;  // Przechowuje błąd, gdyby serwer leżał
 
   @override
   void initState() {
     super.initState();
-    _czasObecnejOsobyWSekundach = _czasNaOsobeWSekundach;
-    _startTimer();
+    _pobierzDaneStartoweIDolacz(); // Inicjalizacja pobierania danych
+  }
+
+  // Funkcja, która pobiera stan początkowy przez HTTP, a potem odpala WebSocket
+  Future<void> _pobierzDaneStartoweIDolacz() async {
+    final apiUrl = Uri.parse('http://10.0.2.2:8000/api/v1/queue/join');
+
+    try {
+      // 1. Wysyłamy żądanie do backendu o dołączenie do kolejki z naszym kodem
+      final response = await http.post(
+        apiUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'code': widget.numerBiletu}),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+
+        setState(() {
+          // Pobieramy realne dane z odpowiedzi zdefiniowanej w api_schemas.py
+          _osobyPrzedNami = data['queue_position'] ?? 0;
+          _poczatkoweOsoby = data['queue_position'] ?? 0; // Punkt odniesienia dla paska postępu
+          _szacowanyCzasMinuty = data['estimated_wait_time_minutes'] ?? 0;
+          _isLoading = false;
+        });
+
+        // 2. Skoro mamy już stan początkowy, otwieramy WebSocket do śledzenia zmian w czasie rzeczywistym
+        _podlaczWebSocket();
+      } else {
+        setState(() {
+          _errorMessage = 'Błąd serwera (Kod: ${response.statusCode})';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Brak połączenia z backendem eQue. Upewnij się, że serwer działa.';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _podlaczWebSocket() {
+    _socketSubscription = _socketService.connectToQueue(widget.numerBiletu).listen(
+      (data) {
+        setState(() {
+          final String event = data['event'] ?? '';
+
+          if (event == 'QUEUE_UPDATE') {
+            final int noweOsoby = data['queue_position'] ?? _osobyPrzedNami;
+            _szacowanyCzasMinuty = data['estimated_wait_time_minutes'] ?? _szacowanyCzasMinuty;
+
+            if (noweOsoby < _osobyPrzedNami) {
+              _pokazPowiadomienie(noweOsoby);
+            }
+            _osobyPrzedNami = noweOsoby;
+
+          } else if (event == 'YOUR_TURN') {
+            _osobyPrzedNami = 0;
+            _szacowanyCzasMinuty = 0;
+            _pokazPowiadomienie(0);
+          }
+        });
+      },
+      onError: (error) {
+        debugPrint('Błąd WebSocketa: $error');
+      },
+    );
   }
 
   @override
   void dispose() {
-    _odliczanie?.cancel();
+    _socketSubscription?.cancel();
+    _socketService.disconnect();
     super.dispose();
-  }
-
-  void _startTimer() {
-    _odliczanie = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_osobyPrzedNami > 0) {
-          _czasObecnejOsobyWSekundach--;
-          if (_czasObecnejOsobyWSekundach <= 0) {
-            _osobyPrzedNami--;
-            if (_osobyPrzedNami > 0) {
-              _czasObecnejOsobyWSekundach = _czasNaOsobeWSekundach;
-              _pokazPowiadomienie(_osobyPrzedNami);
-            } else {
-              _pokazPowiadomienie(0);
-            }
-          }
-        } else {
-          timer.cancel();
-        }
-      });
-    });
   }
 
   Future<void> _pokazPowiadomienie(int ileOsobZostalo) async {
@@ -96,7 +150,8 @@ class _QueueStatusScreenState extends State<QueueStatusScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
               onPressed: () {
-                _odliczanie?.cancel();
+                _socketSubscription?.cancel();
+                _socketService.disconnect();
                 flutterLocalNotificationsPlugin.cancelAll();
                 Navigator.of(dialogContext).pop();
                 Navigator.of(context).pop(); 
@@ -111,16 +166,61 @@ class _QueueStatusScreenState extends State<QueueStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int calkowityPozostalyCzas = 0;
-    if (_osobyPrzedNami > 0) {
-      calkowityPozostalyCzas = ((_osobyPrzedNami - 1) * _czasNaOsobeWSekundach) + _czasObecnejOsobyWSekundach;
+    // Widok 1: Ładowanie danych po wejściu na ekran
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Dołączanie do kolejki...')),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Pobieranie aktualnej pozycji z eQue...'),
+            ],
+          ),
+        ),
+      );
     }
 
-    int minuty = calkowityPozostalyCzas ~/ 60;
-    int sekundy = calkowityPozostalyCzas % 60;
-    String tekstCzasu = "$minuty:${sekundy.toString().padLeft(2, '0')}";
+    // Widok 2: Obsługa błędu, np. brak sieci lub wyłączony serwer
+    if (_errorMessage != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Błąd połączenia')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cloud_off, size: 64, color: Colors.redAccent),
+                const SizedBox(height: 16),
+                Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _errorMessage = null;
+                    });
+                    _pobierzDaneStartoweIDolacz();
+                  },
+                  child: const Text('Spróbuj ponownie'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Wróć do skanera'),
+                )
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
-    double postep = _poczatkoweOsoby > 0 ? calkowityPozostalyCzas / (_poczatkoweOsoby * _czasNaOsobeWSekundach) : 0.0;
+    // Widok 3: Właściwy ekran statusu z realnymi danymi pobranymi z API
+    String tekstCzasu = "~$_szacowanyCzasMinuty min";
+    double postep = _poczatkoweOsoby > 0 ? _osobyPrzedNami / _poczatkoweOsoby : 0.0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Status Twojej Wizyty')),
