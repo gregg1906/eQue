@@ -27,7 +27,7 @@ class _KioskLoginScreenState extends State<KioskLoginScreen> {
 
     // Pamiętaj: 10.0.2.2 to localhost dla emulatora Androida. 
     // Na prawdziwym urządzeniu musisz podać IP swojego komputera w sieci lokalnej (np. 192.168.x.x)
-    final url = Uri.parse('http://10.0.2.2:8000/api/v1/auth/login');
+    final url = Uri.parse('http://localhost:8000/api/v1/auth/login');
 
     try {
       final response = await http.post(
