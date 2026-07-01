@@ -1,50 +1,181 @@
-import bcrypt
-from database import SessionLocal
-from models import Admin, ServicePoint, Tablet, Ticket
+"""
+seed.py — zasilanie bazy danych danymi testowymi.
 
-def hash_password(password: str) -> str:
-    """Szyfruje hasło używając bezpośrednio nowoczesnego bcrypt."""
-    salt = bcrypt.gensalt()
-    hashed_bytes = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed_bytes.decode('utf-8')
+Uruchamianie:
+    python seed.py
+
+Skrypt jest idempotentny: jeśli tabela users już zawiera dane, kończy bez zmian.
+"""
+from datetime import datetime, timedelta, timezone
+from database import SessionLocal
+from models import User, Location, Tablet, Ticket
+from auth import hash_password
+
 
 def seed_data():
     db = SessionLocal()
-    
-    if db.query(Admin).first():
-        print("Baza już posiada dane. Pomijam seeding.")
+
+    # Guard: nie seeduj drugi raz
+    if db.query(User).first():
+        print("Baza już zawiera dane. Pomijam seeding.")
         db.close()
         return
 
     print("Zasilanie bazy danych (Seeding)...")
 
-    # 1. Tworzymy Superadmina z nowym mechanizmem szyfrowania
-    hashed_password = hash_password("admin123")
-    admin = Admin(username="admin", password_hash=hashed_password)
-    db.add(admin)
+    # ------------------------------------------------------------------
+    # 1. Użytkownicy
+    # ------------------------------------------------------------------
 
-    # 2. Tworzymy Punkty Obsługi
-    sp1 = ServicePoint(name="Okienko 1", category="Rejestracja Ogólna")
-    sp2 = ServicePoint(name="Okienko 3", category="Rejestracja Ogólna")
-    sp3 = ServicePoint(name="Gabinet Kardiologiczny", category="Kardiologia")
-    
-    db.add_all([sp1, sp2, sp3])
+    admin = User(
+        username="admin",
+        full_name="Administrator Systemu",
+        role="ADMIN",
+        password_hash=hash_password("admin123"),
+        is_active=True,
+    )
+
+    op1 = User(
+        username="jan.kowalski",
+        full_name="Jan Kowalski",
+        position="Recepcjonista",
+        role="OPERATOR",
+        password_hash=hash_password("operator123"),
+        is_active=True,
+    )
+
+    op2 = User(
+        username="anna.nowak",
+        full_name="Anna Nowak",
+        position="Pielęgniarka",
+        role="OPERATOR",
+        password_hash=hash_password("operator123"),
+        is_active=True,
+    )
+
+    db.add_all([admin, op1, op2])
+    db.commit()   # nadaj UUID-y
+
+    # ------------------------------------------------------------------
+    # 2. Lokalizacje
+    # ------------------------------------------------------------------
+
+    loc1 = Location(
+        name="Rejestracja Ogólna",
+        description="Główna rejestracja przy wejściu",
+        category="Rejestracja",
+        is_active=True,
+    )
+
+    loc2 = Location(
+        name="Gabinet Kardiologiczny",
+        description="Piętro 2, pokój 214",
+        category="Kardiologia",
+        is_active=True,
+    )
+
+    db.add_all([loc1, loc2])
+    db.commit()   # nadaj ID
+
+    # ------------------------------------------------------------------
+    # 3. Przypisanie operatorów do lokalizacji (user_locations M2M)
+    # ------------------------------------------------------------------
+
+    op1.locations = [loc1]          # Jan → Rejestracja
+    op2.locations = [loc1, loc2]    # Anna → obie lokalizacje
     db.commit()
 
-    # 3. Tworzymy Tablety
-    tab1 = Tablet(name="Tablet Wejściowy", location="Hol Główny", service_point_id=None)
-    tab2 = Tablet(name="Tablet Rejestracja", location="Okienko 1", service_point_id=sp1.id)
-    tab3 = Tablet(name="Kiosk Kardiologia", location="Piętro 2", service_point_id=sp3.id)
-    db.add_all([tab1, tab2, tab3])
+    # ------------------------------------------------------------------
+    # 4. Tablety
+    # ------------------------------------------------------------------
 
-    # 4. Tworzymy testowych pacjentów w kolejce
-    ticket1 = Ticket(ticket_code="GCH", service_point_id=sp2.id, status="WAITING")
-    ticket2 = Ticket(ticket_code="A12", service_point_id=sp1.id, status="WAITING")
-    db.add_all([ticket1, ticket2])
+    tab1 = Tablet(
+        name="Kiosk Rejestracja",
+        location_id=loc1.id,
+        is_active=True,
+    )
 
+    tab2 = Tablet(
+        name="Kiosk Kardiologia",
+        location_id=loc2.id,
+        is_active=True,
+    )
+
+    db.add_all([tab1, tab2])
+    db.commit()
+
+    # ------------------------------------------------------------------
+    # 5. Testowe bilety (kolejka)
+    # ------------------------------------------------------------------
+
+    now = datetime.now(timezone.utc)
+
+    # Rejestracja — 3 oczekujące + 1 obsługiwany
+    tickets_loc1 = [
+        Ticket(
+            ticket_code="A2F",
+            status="WAITING",
+            location_id=loc1.id,
+            joined_at=now - timedelta(minutes=25),
+            customer_name="Piotr Wiśniewski",
+        ),
+        Ticket(
+            ticket_code="B7K",
+            status="WAITING",
+            location_id=loc1.id,
+            joined_at=now - timedelta(minutes=15),
+        ),
+        Ticket(
+            ticket_code="C3M",
+            status="WAITING",
+            location_id=loc1.id,
+            joined_at=now - timedelta(minutes=5),
+            appointment_time="10:30",
+        ),
+        Ticket(
+            ticket_code="D9X",
+            status="SERVING",
+            location_id=loc1.id,
+            joined_at=now - timedelta(minutes=35),
+            called_at=now - timedelta(minutes=2),
+            served_by_user_id=op1.id,
+            customer_name="Maria Zielińska",
+        ),
+    ]
+
+    # Kardiologia — 2 oczekujące
+    tickets_loc2 = [
+        Ticket(
+            ticket_code="E5P",
+            status="WAITING",
+            location_id=loc2.id,
+            joined_at=now - timedelta(minutes=40),
+            appointment_time="09:45",
+            customer_name="Tomasz Jankowski",
+        ),
+        Ticket(
+            ticket_code="F2R",
+            status="WAITING",
+            location_id=loc2.id,
+            joined_at=now - timedelta(minutes=20),
+        ),
+    ]
+
+    db.add_all(tickets_loc1 + tickets_loc2)
+    print(f"   📍 Lokalizacja 1: Rejestracja Ogólna  (ID: {loc1.id})")
+    print(f"   📍 Lokalizacja 2: Gabinet Kardiologiczny (ID: {loc2.id})")
+    print(f"   📱 Tablet 1: Kiosk Rejestracja  → loc {loc1.id}")
+    print(f"   📱 Tablet 2: Kiosk Kardiologia → loc {loc2.id}")
     db.commit()
     db.close()
-    print("Zakończono! Baza jest gotowa do testów z frontendem.")
+
+    print("✅ Seeding zakończony! Dane testowe:")
+    print(f"   👤 Admin:     admin / admin123")
+    print(f"   👤 Operator1: jan.kowalski / operator123  → Rejestracja Ogólna")
+    print(f"   👤 Operator2: anna.nowak / operator123    → Rejestracja Ogólna + Kardiologia")
+    print(f"   🎫 Bilety loc1: 3×WAITING + 1×SERVING")
+    print(f"   🎫 Bilety loc2: 2×WAITING")
+
 
 if __name__ == "__main__":
     seed_data()

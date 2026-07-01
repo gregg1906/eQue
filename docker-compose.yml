@@ -10,6 +10,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d eque_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis_cache:
     image: redis:7
@@ -17,12 +22,33 @@ services:
     ports:
       - "6379:6379"
 
+  backend:
+    build:
+      context: ./backend
+    container_name: eque_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://admin:jebaccity@db:5432/eque_db
+      - REDIS_URL=redis://redis_cache:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis_cache:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+
   web:
     build:
       context: ./web
     container_name: eque_web
     ports:
       - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
     volumes:
       - ./web:/app
       - /app/node_modules
