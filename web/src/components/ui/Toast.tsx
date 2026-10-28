@@ -1,15 +1,21 @@
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
-import { dismissToast, useCurrentToast } from './useToast';
+import { dismissToast, useToastState } from './useToast';
 
 /** Miejsce na powiadomienia — montowane raz, w App.tsx. */
 export function ToastHost() {
-  const toast = useCurrentToast();
+  const { item: toast, closing } = useToastState();
 
   return createPortal(
     <div className="toast-host" aria-live="polite">
       {toast && (
-        <div key={toast.id} className="toast" role={toast.tone === 'error' ? 'alert' : 'status'}>
+        // Ten sam element przy podmianie treści (bez ponownego wejścia); błąd dostaje nowy, żeby czytnik ogłosił alert.
+        <div
+          key={toast.tone}
+          className="toast"
+          data-state={closing ? 'closing' : 'open'}
+          role={toast.tone === 'error' ? 'alert' : 'status'}
+        >
           {toast.tone === 'error' && <Icon name="alert" className="toast-icon" />}
           <span className="toast-text">{toast.text}</span>
           {toast.undo && (

@@ -9,7 +9,8 @@ interface LoginFormProps {
   onLoginSuccess: (me: MeResponse) => void;
 }
 
-const INVALID_CREDENTIALS = 'Login lub hasło są nieprawidłowe. Sprawdź, czy nie masz włączonego Caps Lock.';
+const FACILITY_NAME = 'Testowy szpital';
+const INVALID_CREDENTIALS ='Login lub hasło są nieprawidłowe. Sprawdź, czy nie masz włączonego Caps Lock.';
 
 export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const [username, setUsername] = useState('');
@@ -52,14 +53,14 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           <img src="/logo-mark.svg" width="32" height="32" alt="" />
           eQue
         </span>
-        <div className="login-big" aria-hidden="true">A05</div>
-        <p>Zarządzaj kolejkami w swojej placówce szybko i wygodnie. Panel przeznaczony dla personelu.</p>
+        <div className="login-big">{FACILITY_NAME}</div>
+        <p>Zarządzaj kolejkami w swojej placówce szybko i wygodnie.</p>
       </div>
 
       <div className="login-form">
         <form onSubmit={handleLogin} noValidate>
           <h1 className="login-title">Zaloguj się</h1>
-          <p className="login-sub">Dane logowania dostajesz od administratora.</p>
+          <p className="login-sub">Panel przeznaczony dla personelu.</p>
 
           {error && (
             <div className="form-error" role="alert">

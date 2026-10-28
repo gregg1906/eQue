@@ -369,7 +369,7 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
                 <div><strong>{noShow}</strong><span>Nie zgłosiło się</span></div>
               </div>
               <div className="meter" aria-hidden="true">
-                <i style={{ width: `${totalShift ? Math.round((myActivity.length / totalShift) * 100) : 0}%` }} />
+                <i style={{ clipPath: `inset(0 ${100 - (totalShift ? Math.round((myActivity.length / totalShift) * 100) : 0)}% 0 0 round 999px)` }} />
               </div>
               <p className="meter-cap">Zakończono <b>{myActivity.length}</b> z <b>{totalShift}</b> zgłoszeń w tej zmianie</p>
             </div>

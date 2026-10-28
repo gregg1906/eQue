@@ -121,7 +121,9 @@
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-fast: 120ms;
+  --dur-press: 160ms;  /* reakcja przycisku na wciśnięcie */
   --dur-base: 200ms;
+  --dur-slow: 260ms;   /* panele boczne, wejście powiadomień */
 
   color-scheme: light;
 }
@@ -252,6 +254,15 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text-strong); le
 @keyframes eque-flip { from { transform: translateY(18%); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes eque-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 55%, transparent); } 80%, 100% { box-shadow: 0 0 0 6px transparent; } }
 
+/*
+  Ograniczony ruch = mniej i łagodniej, nie zero.
+  Pętle (pulsowanie, „Na żywo”, spinner) stają w miejscu — bez iteration-count: 1 animacja 0.01ms
+  powtarzana w nieskończoność migocze. Przesuwanie paneli zastępują przenikania (reguły przy komponentach).
+*/
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

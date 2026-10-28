@@ -340,7 +340,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
         </>}
       >
         {createdTablet ? (
-          <>
+          <div className="step-reveal">
             <p className="step-done"><Icon name="check" />Tablet jest gotowy do sparowania.</p>
             <Field label="Token parowania" hint="Wpisz go w aplikacji mobilnej na tablecie, w zakładce „Konfiguracja kiosku”.">
               <TokenField token={createdTablet.pairing_token ?? ''} />
@@ -349,7 +349,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
               <Icon name="info" />
               <span>Następnie nadaj tabletowi nazwę i przypisz lokalizację — dopiero wtedy kiosk pokaże kolejkę.</span>
             </div>
-          </>
+          </div>
         ) : (
           <p className="m-0">
             Wygenerujemy token parowania. Wpiszesz go w aplikacji mobilnej na tablecie, w zakładce „Konfiguracja kiosku”.

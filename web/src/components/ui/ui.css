@@ -1,6 +1,6 @@
 /*
   Wspólne komponenty panelu (opcja B „Odświeżony teal”).
-  Wygląd przeniesiony z makiety design-system/opcja-b-odswiezony-teal na tokeny z tokens.css.
+  Wygląd oparty na tokenach z tokens.css.
   Hover i focus wyłącznie w CSS — komponenty React nie zmieniają stylów w onMouseEnter/onMouseLeave.
 */
 
@@ -12,9 +12,9 @@
   height: 40px; padding: 0 16px; border-radius: var(--radius-md); border: 1px solid transparent;
   font-family: var(--font-ui); font-weight: 700; font-size: var(--text-base); line-height: 1.2;
   cursor: pointer; white-space: nowrap; text-decoration: none;
-  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform 80ms var(--ease-out);
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
-.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-sm { height: 32px; padding: 0 12px; font-size: var(--text-sm); gap: 6px; }
 .btn-lg { height: 48px; padding: 0 20px; font-size: var(--text-md); }
@@ -39,9 +39,10 @@
   width: 36px; height: 36px; padding: 0; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--radius-md); border: 0; background: transparent; color: var(--text-muted); cursor: pointer;
-  transition: background var(--dur-fast), color var(--dur-fast);
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-press) var(--ease-out);
 }
 .icon-btn:hover { background: var(--surface-sunken); color: var(--text-strong); }
+.icon-btn:active { transform: scale(0.97); }
 
 kbd {
   font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; line-height: 1;
@@ -91,8 +92,17 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
   background: var(--surface-card); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md); box-shadow: var(--shadow-xl);
   max-height: 264px; overflow-y: auto; padding: 6px;
+  /* lista otwiera się zawsze pod polem — rośnie od jego krawędzi */
   transform-origin: top center;
-  transition: transform 190ms var(--ease-out), opacity 150ms var(--ease-out);
+  opacity: 0; visibility: hidden; pointer-events: none; transform: scale(0.97);
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out), visibility 0s var(--dur-fast);
+}
+.select-panel.is-open {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+}
+@starting-style {
+  .select-panel.is-open { opacity: 0; transform: scale(0.97); }
 }
 .select-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .select-option {
@@ -201,7 +211,16 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 .toast {
   display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; min-height: 52px;
   background: var(--toast-bg); color: var(--toast-fg); border-radius: var(--radius-md); box-shadow: var(--shadow-xl);
-  font-size: var(--text-base); pointer-events: auto; animation: eque-toast-in .24s var(--ease-out);
+  font-size: var(--text-base); pointer-events: auto;
+  /* przejścia, nie keyframes: podmiana tekstu nie restartuje wejścia, a wyjście wraca tą samą drogą */
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+}
+@starting-style {
+  .toast { opacity: 0; transform: translateY(12px); }
+}
+.toast[data-state="closing"] {
+  opacity: 0; transform: translateY(12px); pointer-events: none;
+  transition-duration: var(--dur-fast);
 }
 .toast .toast-text { flex: 1; min-width: 0; }
 .toast .toast-icon { color: var(--red-500); }
@@ -209,7 +228,6 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 .toast .btn:hover { background: color-mix(in srgb, var(--toast-fg) 12%, transparent); }
 .toast .icon-btn { color: color-mix(in srgb, var(--toast-fg) 70%, transparent); width: 32px; height: 32px; }
 .toast .icon-btn:hover { background: color-mix(in srgb, var(--toast-fg) 12%, transparent); color: var(--toast-fg); }
-@keyframes eque-toast-in { from { transform: translateY(12px); opacity: 0; } }
 
 /* ——— Pusty stan, notatka, błąd ——— */
 .empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 32px; max-width: 52ch; }
@@ -239,9 +257,9 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
   background: var(--surface-card); border-left: 1px solid var(--border-subtle); box-shadow: var(--shadow-xl);
   display: flex; flex-direction: column;
   transform: translateX(104%); visibility: hidden;
-  transition: transform .26s var(--ease-out), visibility 0s .26s;
+  transition: transform var(--dur-slow) var(--ease-out), visibility 0s var(--dur-slow);
 }
-.drawer.is-open { transform: none; visibility: visible; transition: transform .26s var(--ease-out); }
+.drawer.is-open { transform: none; visibility: visible; transition: transform var(--dur-slow) var(--ease-out); }
 .drawer-head { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border-subtle); }
 .drawer-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; color: var(--text-strong); flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .drawer-body { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
@@ -260,7 +278,8 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 
 /* ——— Paleta poleceń ——— */
 .cmdk-scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 70; display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
-.cmdk { width: min(560px, 100%); background: var(--surface-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); border: 1px solid var(--border-subtle); overflow: hidden; animation: eque-toast-in .18s var(--ease-out); }
+/* bez animacji otwarcia: paleta jest wywoływana z klawiatury wiele razy dziennie */
+.cmdk { width: min(560px, 100%); background: var(--surface-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); border: 1px solid var(--border-subtle); overflow: hidden; }
 .cmdk-in { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); }
 .cmdk-in input { flex: 1; height: 54px; border: 0; background: transparent; outline: none; font-family: var(--font-ui); font-size: var(--text-md); color: var(--text-strong); min-width: 0; }
 .cmdk-in input:focus-visible { outline: none; }
@@ -273,14 +292,14 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 /* ——— Okno dialogowe ——— */
 .dialog-scrim {
   position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px;
-  background: var(--scrim); opacity: 0; transition: opacity 200ms var(--ease-out);
+  background: var(--scrim); opacity: 0; transition: opacity var(--dur-base) var(--ease-out);
 }
 .dialog-scrim.is-visible { opacity: 1; }
 .dialog {
   width: 100%; max-width: 420px; background: var(--surface-card); border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); padding: 24px;
   transform: translateY(8px) scale(.97); opacity: 0;
-  transition: transform 220ms var(--ease-out), opacity 160ms var(--ease-out);
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
 }
 .dialog-scrim.is-visible .dialog { transform: none; opacity: 1; }
 .dialog-icon { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; background: var(--brand-subtle); color: var(--text-brand); }
@@ -288,3 +307,12 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 .dialog-title { font-family: var(--font-display); font-size: var(--text-md); font-weight: 700; color: var(--text-strong); margin: 0 0 6px; }
 .dialog-text { margin: 0; color: var(--text-body); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
+
+/* ——— Ograniczony ruch: bez przesuwania i skalowania, zostają krótkie przenikania ——— */
+@media (prefers-reduced-motion: reduce) {
+  .drawer { transform: none; opacity: 0; transition: opacity var(--dur-base) var(--ease-out), visibility 0s var(--dur-base); }
+  .drawer.is-open { opacity: 1; transition: opacity var(--dur-base) var(--ease-out); }
+  .dialog, .dialog-scrim.is-visible .dialog { transform: none; }
+  .select-panel, .select-panel.is-open { transform: none; }
+  .toast, .toast[data-state="closing"] { transform: none; transition-property: opacity; }
+}
