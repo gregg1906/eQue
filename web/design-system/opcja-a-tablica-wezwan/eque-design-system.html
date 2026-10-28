@@ -1,0 +1,1253 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>eQue Tablica wezwań</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&display=swap">
+<style>
+/* Layout concept: dokument-przewodnik z lepkim spisem treści po lewej; ekrany aplikacji osadzone jako działające okna. */
+:root {
+  /* Kolor — „Tablica wezwań” */
+  --paper:        #EEF0F4;  /* tło strony: chłodny papier biletu */
+  --surface:      #FFFFFF;
+  --surface-2:    #F5F6F9;
+  --nav-active:   #E2E6EF;
+  --line:         #DCE0E8;
+  --line-strong:  #C2C8D5;
+  --ink:          #141C33;  /* atrament: tekst główny */
+  --ink-2:        #39425E;  /* tekst treści */
+  --ink-3:        #5C6480;  /* tekst pomocniczy */
+  --primary-bg:   #141C33;
+  --primary-hover:#26304F;
+  --primary-fg:   #FFFFFF;
+  --signal:       #FFC83D;  /* sygnał wezwania — tylko dla „wzywam / wezwany” */
+  --signal-hover: #FFBA14;
+  --signal-ink:   #141C33;
+  --signal-soft:  #FFF2C9;
+  --ok:           #1D7A51;
+  --ok-soft:      #E1F2E8;
+  --miss:         #B23227;
+  --miss-soft:    #FAE5E2;
+  --focus:        #2D55D2;
+  --logo-bg:      #141C33;
+  --scrim:        rgba(12, 17, 32, .48);
+  --shadow-pop:   0 1px 2px rgba(20,28,51,.08), 0 12px 32px rgba(20,28,51,.14);
+
+  /* Typografia — jedna rodzina, oś szerokości jako narzędzie */
+  --font: "Archivo", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --w-code: 125%;   /* kody biletów: rozciągnięte jak na wyświetlaczu */
+  --w-head: 112%;   /* nagłówki */
+  --w-ui: 100%;     /* interfejs i treść */
+  --w-dense: 88%;   /* gęste tabele, wąskie kolumny */
+  --t-12: .75rem; --t-13: .8125rem; --t-15: .9375rem; --t-17: 1.0625rem;
+  --t-20: 1.25rem; --t-25: 1.5625rem; --t-32: 2rem; --t-44: 2.75rem; --t-code: clamp(3.5rem, 9vw, 6.5rem);
+
+  /* Kształt — promień zależy od roli, nie jest jednakowy */
+  --r-control: 8px; --r-panel: 12px; --r-ticket: 5px; --r-pill: 999px;
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px; --s-7: 48px; --s-8: 64px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --hatch: repeating-linear-gradient(-45deg, var(--signal) 0 7px, var(--ink) 7px 14px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0C1120; --surface: #141B2E; --surface-2: #1A2237; --nav-active: #232C45;
+    --line: #262F48; --line-strong: #37415E;
+    --ink: #EDF0F7; --ink-2: #C4CADA; --ink-3: #9098B0;
+    --primary-bg: #EDF0F7; --primary-hover: #D3D8E6; --primary-fg: #0C1120;
+    --signal: #FFC83D; --signal-hover: #FFD466; --signal-ink: #141C33; --signal-soft: rgba(255,200,61,.14);
+    --ok: #55C893; --ok-soft: rgba(85,200,147,.14); --miss: #FF8173; --miss-soft: rgba(255,129,115,.14);
+    --focus: #8FA8FF; --logo-bg: #232C45; --scrim: rgba(0,0,0,.6);
+    --shadow-pop: 0 1px 2px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.5);
+    --hatch: repeating-linear-gradient(-45deg, #FFC83D 0 7px, #0C1120 7px 14px);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0C1120; --surface: #141B2E; --surface-2: #1A2237; --nav-active: #232C45;
+  --line: #262F48; --line-strong: #37415E;
+  --ink: #EDF0F7; --ink-2: #C4CADA; --ink-3: #9098B0;
+  --primary-bg: #EDF0F7; --primary-hover: #D3D8E6; --primary-fg: #0C1120;
+  --signal: #FFC83D; --signal-hover: #FFD466; --signal-ink: #141C33; --signal-soft: rgba(255,200,61,.14);
+  --ok: #55C893; --ok-soft: rgba(85,200,147,.14); --miss: #FF8173; --miss-soft: rgba(255,129,115,.14);
+  --focus: #8FA8FF; --logo-bg: #232C45; --scrim: rgba(0,0,0,.6);
+  --shadow-pop: 0 1px 2px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.5);
+  --hatch: repeating-linear-gradient(-45deg, #FFC83D 0 7px, #0C1120 7px 14px);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-padding-top: 80px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+body {
+  margin: 0; background: var(--paper); color: var(--ink-2);
+  font-family: var(--font); font-size: var(--t-15); line-height: 1.55;
+  font-stretch: var(--w-ui); -webkit-font-smoothing: antialiased;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); }
+h1, h2, h3, h4 { color: var(--ink); font-stretch: var(--w-head); text-wrap: balance; margin: 0; line-height: 1.15; }
+p { margin: 0; }
+a { color: var(--ink); text-underline-offset: 3px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ——— Strona przewodnika ——— */
+.topbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.topbar-in { max-width: 1320px; margin: 0 auto; height: 60px; display: flex; align-items: center; gap: var(--s-4); }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand b { font-stretch: var(--w-code); font-weight: 800; font-size: var(--t-20); color: var(--ink); letter-spacing: -.01em; }
+.brand span { color: var(--ink-3); font-size: var(--t-13); font-weight: 500; }
+.topbar .spacer { flex: 1; }
+.kbtn {
+  display: inline-flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px 0 12px;
+  border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--r-control);
+  color: var(--ink-3); cursor: pointer; font-size: var(--t-13);
+}
+.kbtn:hover { border-color: var(--line-strong); color: var(--ink-2); }
+kbd {
+  font-family: var(--font); font-stretch: var(--w-dense); font-size: 11.5px; font-weight: 600;
+  min-width: 22px; height: 22px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); color: var(--ink-2);
+}
+.themes { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-control); padding: 2px; background: var(--surface-2); }
+.themes button { border: 0; background: none; height: 30px; padding: 0 10px; border-radius: 6px; cursor: pointer; color: var(--ink-3); font-size: var(--t-13); font-weight: 500; }
+.themes button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(20,28,51,.12); font-weight: 600; }
+
+.page {
+  max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--s-7);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: var(--s-6) var(--s-8);
+}
+.toc { position: sticky; top: 92px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+.toc a { text-decoration: none; color: var(--ink-3); padding: 6px 10px; border-radius: 6px; font-size: var(--t-13); font-weight: 500; }
+.toc a:hover { color: var(--ink); background: var(--surface); }
+.toc a.on { color: var(--ink); background: var(--nav-active); font-weight: 600; }
+.toc hr { border: 0; border-top: 1px solid var(--line); margin: 8px 10px; }
+main { min-width: 0; display: flex; flex-direction: column; gap: var(--s-8); }
+section { display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
+.sec-head { display: flex; flex-direction: column; gap: var(--s-2); max-width: 68ch; }
+.sec-head h2 { font-size: var(--t-32); font-weight: 750; letter-spacing: -.015em; }
+.sec-head p { color: var(--ink-3); font-size: var(--t-17); }
+h3.sub { font-size: var(--t-20); font-weight: 700; }
+
+.intro { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: var(--s-6); align-items: end; }
+.intro h1 { font-size: clamp(2.25rem, 5vw, 3.5rem); font-weight: 800; letter-spacing: -.025em; font-stretch: 118%; line-height: 1.02; }
+.intro .lede { font-size: var(--t-17); color: var(--ink-2); max-width: 60ch; margin-top: var(--s-4); }
+.intro-meta { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4) var(--s-5); border-left: 2px solid var(--line-strong); }
+.intro-meta dt { font-size: var(--t-12); color: var(--ink-3); }
+.intro-meta dd { margin: 0 0 4px; color: var(--ink); font-weight: 600; }
+
+/* ——— Zasady ——— */
+.principles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.principle { background: var(--surface); padding: var(--s-5); display: flex; flex-direction: column; gap: var(--s-2); }
+.principle h3 { font-size: var(--t-17); font-weight: 700; }
+.principle p { color: var(--ink-3); max-width: 52ch; }
+
+/* ——— Kolory ——— */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--s-4); }
+.sw { display: flex; flex-direction: column; gap: var(--s-2); }
+.sw-chip { height: 76px; border-radius: var(--r-control); border: 1px solid var(--line); display: flex; align-items: flex-end; padding: 8px 10px; font-weight: 700; font-stretch: var(--w-code); font-size: var(--t-20); }
+.sw b { color: var(--ink); font-size: var(--t-15); font-weight: 650; }
+.sw small { color: var(--ink-3); font-size: var(--t-13); line-height: 1.4; }
+.sw code { font-family: var(--font); font-stretch: var(--w-dense); font-size: var(--t-12); color: var(--ink-3); }
+.status-map { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.status-map th, .status-map td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.status-map th { font-size: var(--t-13); font-weight: 600; color: var(--ink-3); background: var(--surface-2); }
+.status-map tr:last-child td { border-bottom: 0; }
+.status-map td:last-child { color: var(--ink-3); }
+.scroll-x { overflow-x: auto; min-width: 0; border-radius: var(--r-panel); }
+
+/* ——— Typografia ——— */
+.type-specimen { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.ts-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: var(--s-4); padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--line); align-items: baseline; }
+.ts-row:last-child { border-bottom: 0; }
+.ts-row .meta { color: var(--ink-3); font-size: var(--t-12); line-height: 1.5; }
+.ts-row .meta b { display: block; color: var(--ink); font-size: var(--t-13); }
+.ts-sample { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.width-axis { display: flex; flex-wrap: wrap; gap: var(--s-5); align-items: baseline; padding: var(--s-5); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); }
+.width-axis div { display: flex; flex-direction: column; gap: 4px; }
+.width-axis span { font-size: var(--t-12); color: var(--ink-3); }
+.width-axis strong { font-size: var(--t-44); font-weight: 800; color: var(--ink); line-height: 1; }
+
+/* ——— Komponenty bazowe (wspólne dla przewodnika i makiet) ——— */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border-radius: var(--r-control); border: 1px solid transparent;
+  font-weight: 600; font-size: var(--t-15); cursor: pointer; white-space: nowrap;
+  transition: background .12s var(--ease), border-color .12s var(--ease), transform .08s var(--ease);
+}
+.btn:active { transform: translateY(1px); }
+.btn-sm { height: 32px; padding: 0 12px; font-size: var(--t-13); }
+.btn-lg { height: 48px; padding: 0 20px; font-size: var(--t-17); }
+.btn-primary { background: var(--primary-bg); color: var(--primary-fg); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-call { background: var(--signal); color: var(--signal-ink); font-weight: 700; }
+.btn-call:hover { background: var(--signal-hover); }
+.btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.btn-secondary:hover { background: var(--surface-2); }
+.btn-ghost { background: transparent; color: var(--ink-2); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+.btn-danger { background: transparent; color: var(--miss); border-color: color-mix(in srgb, var(--miss) 40%, transparent); }
+.btn-danger:hover { background: var(--miss-soft); }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn kbd { height: 20px; min-width: 20px; font-size: 11px; background: transparent; color: inherit; border-color: currentColor; opacity: .6; }
+.icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-control); border: 0; background: transparent; color: var(--ink-3); cursor: pointer; }
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label, .field .lbl { font-size: var(--t-13); font-weight: 600; color: var(--ink); }
+.field .hint { font-size: var(--t-13); color: var(--ink-3); }
+.field .err { font-size: var(--t-13); color: var(--miss); display: flex; gap: 6px; align-items: flex-start; }
+.input {
+  height: 40px; width: 100%; padding: 0 12px; border-radius: var(--r-control);
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  transition: border-color .12s, box-shadow .12s;
+}
+textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
+.input::placeholder { color: var(--ink-3); opacity: .8; }
+.input:hover { border-color: var(--ink-3); }
+.input:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent); }
+.input.is-invalid { border-color: var(--miss); }
+select.input { appearance: none; padding-right: 36px; background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+
+.switch { position: relative; width: 40px; height: 24px; border-radius: var(--r-pill); border: 0; padding: 0; background: var(--line-strong); cursor: pointer; flex-shrink: 0; transition: background .18s var(--ease); }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .18s var(--ease); }
+.switch[aria-checked="true"] { background: var(--ok); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); }
+
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--nav-active); max-width: 100%; overflow-x: auto; }
+.seg button { border: 0; background: transparent; height: 34px; padding: 0 12px; border-radius: 7px; cursor: pointer; color: var(--ink-2); font-weight: 600; font-size: var(--t-13); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(20,28,51,.14); }
+.seg .letter { font-stretch: var(--w-code); font-weight: 800; }
+
+/* Status: kropka + tekst, zdania, bez wielkich liter */
+.st { display: inline-flex; align-items: center; gap: 7px; font-size: var(--t-13); font-weight: 600; white-space: nowrap; color: var(--ink-2); }
+.st::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex-shrink: 0; }
+.st-wait::before { background: transparent; border: 2px solid var(--ink-3); width: 8px; height: 8px; }
+.st-called { background: var(--signal); color: var(--signal-ink); padding: 3px 10px 3px 8px; border-radius: var(--r-pill); }
+.st-called::before { background: var(--signal-ink); }
+.st-ok { color: var(--ok); } .st-ok::before { background: var(--ok); }
+.st-miss { color: var(--miss); } .st-miss::before { background: var(--miss); }
+.st-off { color: var(--ink-3); } .st-off::before { background: transparent; border: 2px solid var(--line-strong); }
+.st-paused { color: var(--ink); } .st-paused::before { width: 14px; height: 8px; border-radius: 2px; background: var(--hatch); }
+
+/* Kod biletu: bilecik z perforacją po bokach */
+.ticket {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 58px; height: 30px; padding: 0 10px;
+  border-radius: var(--r-ticket); background: var(--surface-2); border: 1px solid var(--line);
+  font-stretch: var(--w-code); font-weight: 800; font-size: var(--t-15); color: var(--ink); letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+  -webkit-mask: radial-gradient(circle 4px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 4px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 4px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 4px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+}
+.ticket.is-called { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.ticket.is-done { color: var(--ink-3); background: transparent; }
+.qletter { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: var(--primary-bg); color: var(--primary-fg); font-stretch: var(--w-code); font-weight: 800; font-size: var(--t-13); flex-shrink: 0; }
+.qletter.is-off { background: var(--nav-active); color: var(--ink-3); }
+
+.live { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-13); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.live i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.live i::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--ok); opacity: 0; animation: ping 2.4s var(--ease) infinite; }
+.live.is-lost i { background: var(--signal); } .live.is-lost i::after { display: none; }
+@keyframes ping { 0% { transform: scale(.6); opacity: .7; } 70%, 100% { transform: scale(1.5); opacity: 0; } }
+
+.toast {
+  display: flex; align-items: center; gap: var(--s-3); padding: 10px 10px 10px 16px; min-height: 52px;
+  background: var(--primary-bg); color: var(--primary-fg); border-radius: 10px; box-shadow: var(--shadow-pop); font-size: var(--t-15);
+}
+.toast .t-text { flex: 1; min-width: 0; }
+.toast .btn { height: 32px; background: transparent; color: var(--primary-fg); border-color: color-mix(in srgb, var(--primary-fg) 35%, transparent); font-size: var(--t-13); }
+.toast .btn:hover { background: color-mix(in srgb, var(--primary-fg) 12%, transparent); }
+.toast-host { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(520px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast-host .toast { pointer-events: auto; animation: toast-in .24s var(--ease); }
+@keyframes toast-in { from { transform: translateY(12px); opacity: 0; } }
+
+.empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-3); padding: var(--s-6); max-width: 46ch; }
+.empty h4 { font-size: var(--t-17); font-weight: 700; }
+.empty p { color: var(--ink-3); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); }
+.demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: var(--s-4); }
+.demo { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); display: flex; flex-direction: column; min-width: 0; }
+.demo-stage { padding: var(--s-5); display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center; flex: 1; }
+.demo-stage.col { flex-direction: column; align-items: stretch; }
+.demo-cap { border-top: 1px solid var(--line); padding: var(--s-3) var(--s-5); display: flex; flex-direction: column; gap: 2px; }
+.demo-cap b { color: var(--ink); font-size: var(--t-15); }
+.demo-cap span { color: var(--ink-3); font-size: var(--t-13); }
+
+/* ——— Okno aplikacji (makiety ekranów) ——— */
+.screen-tabs { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; justify-content: space-between; }
+.app-wrap { container-type: inline-size; min-width: 0; }
+.app {
+  display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 640px;
+  background: var(--paper); border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20,28,51,.06), 0 24px 60px -24px rgba(20,28,51,.28);
+}
+.app-side { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: var(--s-4) var(--s-3); gap: var(--s-4); }
+.app-side .brand { padding: 4px 8px; }
+.app-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.app-nav .grp { font-size: var(--t-12); color: var(--ink-3); padding: 12px 10px 4px; }
+.app-nav button { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: transparent; color: var(--ink-2); font-weight: 500; cursor: pointer; text-align: left; }
+.app-nav button:hover { background: var(--surface-2); color: var(--ink); }
+.app-nav button[aria-current="page"] { background: var(--nav-active); color: var(--ink); font-weight: 650; }
+.app-nav .count { margin-left: auto; font-size: var(--t-12); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.app-user { display: flex; align-items: center; gap: 10px; padding: 10px 8px 2px; border-top: 1px solid var(--line); }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--nav-active); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: var(--t-12); flex-shrink: 0; }
+.app-user .who { flex: 1; min-width: 0; line-height: 1.3; }
+.app-user .who b { display: block; color: var(--ink); font-size: var(--t-13); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-user .who span { font-size: var(--t-12); color: var(--ink-3); }
+.app-main { display: flex; flex-direction: column; min-width: 0; }
+.app-head { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; padding: var(--s-4) var(--s-6); border-bottom: 1px solid var(--line); background: var(--surface); }
+.app-head h3 { font-size: var(--t-25); font-weight: 750; letter-spacing: -.015em; margin-right: auto; }
+.app-body { padding: var(--s-5) var(--s-6) var(--s-6); display: flex; flex-direction: column; gap: var(--s-5); min-width: 0; }
+
+/* Konsola operatora */
+.console { display: grid; grid-template-columns: minmax(0, 1fr) 248px; gap: var(--s-4); align-items: start; }
+.board {
+  position: relative; background: var(--signal); color: var(--signal-ink); border-radius: var(--r-panel); overflow: hidden;
+  padding: var(--s-5) var(--s-5) var(--s-5) var(--s-5); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-2) var(--s-6); align-items: end;
+}
+.board.is-empty { background: var(--surface); color: var(--ink); border: 1px dashed var(--line-strong); }
+.board-label { grid-column: 1 / -1; font-size: var(--t-15); font-weight: 650; display: flex; align-items: center; gap: var(--s-2); justify-content: space-between; flex-wrap: wrap; }
+.board-code { font-stretch: var(--w-code); font-weight: 850; font-size: var(--t-code); line-height: .9; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.board-code.flip { animation: flip .42s var(--ease); }
+@keyframes flip { 0% { transform: translateY(18%); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.board-who { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; min-width: 0; }
+.board-who b { font-size: var(--t-20); font-weight: 700; overflow-wrap: anywhere; }
+.board-who span { font-size: var(--t-15); opacity: .82; }
+.board-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-4); }
+.board .btn-primary { background: var(--signal-ink); color: #fff; }
+.board .btn-primary:hover { background: #2A3557; }
+.board .btn-outline-ink { background: transparent; border-color: color-mix(in srgb, var(--signal-ink) 45%, transparent); color: var(--signal-ink); }
+.board .btn-outline-ink:hover { background: rgba(20,28,51,.08); }
+.board.is-empty .board-code { color: var(--ink-3); }
+.board-paused { position: absolute; inset: 0 0 auto; height: 8px; background: var(--hatch); }
+.side-stack { display: flex; flex-direction: column; gap: var(--s-4); }
+.side-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3); }
+.side-card h4 { font-size: var(--t-15); font-weight: 700; }
+.side-card p { font-size: var(--t-13); color: var(--ink-3); }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.tally { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-radius: var(--r-control); overflow: hidden; }
+.tally div { background: var(--surface-2); padding: 10px 12px; display: flex; flex-direction: column; }
+.tally strong { font-size: var(--t-25); font-stretch: var(--w-head); font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tally span { font-size: var(--t-12); color: var(--ink-3); }
+.shortcuts { display: flex; flex-direction: column; gap: 8px; font-size: var(--t-13); color: var(--ink-2); }
+.shortcuts div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.qlist-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.qlist { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.qlist li { display: grid; grid-template-columns: 28px 76px minmax(0, 1fr) auto auto; gap: var(--s-4); align-items: center; padding: 0 var(--s-4); min-height: 56px; border-bottom: 1px solid var(--line); }
+.qlist li:last-child { border-bottom: 0; }
+.qlist li:hover { background: var(--surface-2); }
+.qpos { font-size: var(--t-13); font-weight: 700; color: var(--ink-3); text-align: right; font-variant-numeric: tabular-nums; }
+.qname { min-width: 0; line-height: 1.3; }
+.qname b { display: block; color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qname span { display: block; font-size: var(--t-13); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qwait { font-size: var(--t-13); color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.qwait.is-long { color: var(--miss); font-weight: 650; }
+.qlist .btn { opacity: .0; }
+.qlist li:hover .btn, .qlist li:focus-within .btn, .qlist li:first-child .btn { opacity: 1; }
+@media (hover: none) { .qlist .btn { opacity: 1; } }
+
+/* Tabela administracyjna */
+.dtable { width: 100%; border-collapse: collapse; background: var(--surface); }
+.dtable-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); overflow-x: auto; }
+.dtable th { text-align: left; font-size: var(--t-13); font-weight: 600; color: var(--ink-3); padding: 10px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface-2); }
+.dtable td { padding: 0 16px; height: 56px; border-bottom: 1px solid var(--line); white-space: nowrap; color: var(--ink-2); }
+.dtable tr:last-child td { border-bottom: 0; }
+.dtable tbody tr { cursor: pointer; }
+.dtable tbody tr:hover td { background: var(--surface-2); }
+.dtable tbody tr.is-off td { color: var(--ink-3); }
+.cell-main { display: flex; align-items: center; gap: var(--s-3); }
+.cell-main b { color: var(--ink); font-weight: 600; display: block; }
+.cell-main span { font-size: var(--t-13); color: var(--ink-3); }
+.muted-i { color: var(--ink-3); }
+.filters { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+.search { position: relative; flex: 1; min-width: 200px; max-width: 360px; }
+.search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.search .input { padding-left: 36px; }
+
+.attention { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.attention-item { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.attention-item:last-child { border-bottom: 0; }
+.attention-item .ico { width: 32px; height: 32px; border-radius: 8px; background: var(--signal-soft); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.attention-item .txt { flex: 1; min-width: 180px; line-height: 1.35; }
+.attention-item .txt b { color: var(--ink); font-weight: 600; display: block; }
+.attention-item .txt span { color: var(--ink-3); font-size: var(--t-13); }
+.summary-line { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-6); }
+.summary-line div { display: flex; align-items: baseline; gap: 8px; }
+.summary-line strong { font-size: var(--t-25); font-weight: 750; font-stretch: var(--w-head); color: var(--ink); font-variant-numeric: tabular-nums; }
+.summary-line span { color: var(--ink-3); font-size: var(--t-13); }
+
+/* Panel boczny (szczegóły / edycja) */
+.app-stage { position: relative; }
+.drawer-scrim { position: absolute; inset: 0; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); z-index: 4; border-radius: 14px; }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--surface); border-left: 1px solid var(--line); z-index: 5; display: flex; flex-direction: column; transform: translateX(104%); transition: transform .26s var(--ease); box-shadow: var(--shadow-pop); border-radius: 0 14px 14px 0; }
+.app-stage.drawer-open .drawer { transform: none; }
+.app-stage.drawer-open .drawer-scrim { opacity: 1; pointer-events: auto; }
+.drawer-head { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--line); }
+.drawer-head h4 { font-size: var(--t-20); font-weight: 700; flex: 1; min-width: 0; }
+.drawer-body { flex: 1; overflow-y: auto; padding: var(--s-5); display: flex; flex-direction: column; gap: var(--s-5); }
+.drawer-foot { display: flex; gap: var(--s-2); padding: var(--s-3) var(--s-5); border-top: 1px solid var(--line); background: var(--surface-2); border-radius: 0 0 14px 0; }
+.drawer-foot .grow { flex: 1; }
+.checklist { border: 1px solid var(--line-strong); border-radius: var(--r-control); overflow: hidden; }
+.checklist label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; color: var(--ink); font-weight: 500; font-size: var(--t-15); }
+.checklist label:last-child { border-bottom: 0; }
+.checklist input { width: 16px; height: 16px; accent-color: var(--primary-bg); }
+.note { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--r-control); background: var(--surface-2); font-size: var(--t-13); color: var(--ink-2); }
+.danger-zone { border-top: 1px solid var(--line); padding-top: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
+.danger-zone h5 { margin: 0; font-size: var(--t-15); color: var(--ink); }
+
+/* Logowanie */
+.login { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 560px; }
+.login-art { background: var(--logo-bg); color: #fff; padding: var(--s-6); display: flex; flex-direction: column; justify-content: space-between; gap: var(--s-6); position: relative; overflow: hidden; }
+.login-art .brand b { color: #fff; }
+.login-art .big { font-stretch: var(--w-code); font-weight: 850; font-size: clamp(4rem, 12cqi, 8rem); line-height: .85; letter-spacing: -.03em; color: var(--signal); font-variant-numeric: tabular-nums; }
+.login-art p { color: rgba(255,255,255,.78); max-width: 34ch; font-size: var(--t-17); }
+.login-form { background: var(--surface); padding: var(--s-6); display: flex; flex-direction: column; justify-content: center; gap: var(--s-4); }
+.login-form form { display: flex; flex-direction: column; gap: var(--s-4); max-width: 360px; width: 100%; }
+.login-form h4 { font-size: var(--t-25); font-weight: 750; }
+.login-form .sub { color: var(--ink-3); }
+.form-error { display: flex; gap: 10px; padding: 10px 12px; border-radius: var(--r-control); background: var(--miss-soft); color: var(--miss); font-size: var(--t-13); font-weight: 500; }
+
+/* Paleta poleceń */
+.cmdk-scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 70; display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
+.cmdk { width: min(560px, 100%); background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-pop); border: 1px solid var(--line); overflow: hidden; animation: toast-in .18s var(--ease); }
+.cmdk-in { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.cmdk-in input { flex: 1; height: 54px; border: 0; background: transparent; outline: none; font-size: var(--t-17); color: var(--ink); min-width: 0; }
+.cmdk ul { list-style: none; margin: 0; padding: 6px; max-height: 340px; overflow-y: auto; }
+.cmdk li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--ink-2); }
+.cmdk li .grp { margin-left: auto; font-size: var(--t-12); color: var(--ink-3); }
+.cmdk li[aria-selected="true"] { background: var(--nav-active); color: var(--ink); }
+.cmdk .none { padding: 18px 12px; color: var(--ink-3); cursor: default; }
+
+/* Trendy i wdrożenie */
+.trend-table td:first-child { color: var(--ink); font-weight: 600; min-width: 200px; }
+.trend-table td { white-space: normal; line-height: 1.45; vertical-align: top; padding-block: 14px; }
+.trend-table td:nth-child(2) { min-width: 280px; }
+.trend-table td:nth-child(3) { min-width: 140px; font-size: var(--t-13); }
+pre.code { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: var(--s-4) var(--s-5); overflow-x: auto; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.6; color: var(--ink-2); }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-panel); overflow: hidden; }
+.steps li { counter-increment: s; background: var(--surface); padding: var(--s-4) var(--s-5) var(--s-4) 64px; position: relative; }
+.steps li::before { content: counter(s); position: absolute; left: 20px; top: 16px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: var(--t-13); color: var(--ink); }
+.steps b { color: var(--ink); display: block; }
+.steps span { color: var(--ink-3); font-size: var(--t-15); }
+.sources { display: flex; flex-direction: column; gap: 6px; font-size: var(--t-13); color: var(--ink-3); }
+.sources a { color: var(--ink-2); }
+
+/* Responsywność */
+@container (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .app-side { display: none; }
+  .console { grid-template-columns: minmax(0, 1fr); }
+  .login { grid-template-columns: minmax(0, 1fr); }
+  .login-art { min-height: 220px; }
+}
+@container (max-width: 560px) {
+  .app-head, .app-body { padding-left: var(--s-4); padding-right: var(--s-4); }
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .qlist li { grid-template-columns: 64px minmax(0, 1fr) auto; padding: 10px var(--s-3); gap: var(--s-3); }
+  .qlist .qpos, .qlist .qwait { display: none; }
+  .board-actions .btn { flex: 1 1 100%; white-space: normal; height: auto; min-height: 48px; padding-block: 10px; }
+  .board-actions kbd { display: none; }
+}
+@media (max-width: 1000px) {
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .toc { display: none; }
+  .intro { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .principles { grid-template-columns: minmax(0, 1fr); }
+  .ts-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .brand span, .kbtn .lbl, .kbtn kbd, .topbar .brand b { display: none; }
+  .kbtn { padding: 0 9px; }
+  .themes button { padding: 0 8px; }
+  .sec-head h2 { font-size: var(--t-25); }
+}
+</style>
+</head><body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-queue" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="19" cy="16.5" r="2.5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-7.2-7-12a7 7 0 0114 0c0 4.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></symbol>
+    <symbol id="i-tablet" viewBox="0 0 24 24"><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.6a3.5 3.5 0 010 6.8M18 14.2a6.5 6.5 0 013.5 5.8"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 20H5a1 1 0 01-1-1V5a1 1 0 011-1h4M16 16l4-4-4-4M20 12H9"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15zM10 20.5a2 2 0 004 0"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></symbol>
+    <symbol id="i-logo" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="var(--logo-bg)"/><circle cx="20" cy="38" r="5" fill="#fff" fill-opacity=".4"/><circle cx="32" cy="38" r="6" fill="#fff" fill-opacity=".72"/><circle cx="45" cy="38" r="7.5" fill="#FFC83D"/><path d="M40 20.5l5 4.5 5-4.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#start"><svg width="30" height="30" aria-hidden="true"><use href="#i-logo"/></svg><b>eQue</b><span>Design system panelu webowego</span></a>
+    <div class="spacer"></div>
+    <button class="kbtn" id="openCmdk" type="button" aria-label="Otwórz paletę poleceń"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="lbl">Szukaj i przejdź</span><kbd>Ctrl</kbd><kbd>K</kbd></button>
+    <div class="themes" role="group" aria-label="Motyw">
+      <button type="button" data-theme-set="system" aria-pressed="true">Auto</button>
+      <button type="button" data-theme-set="light" aria-pressed="false">Jasny</button>
+      <button type="button" data-theme-set="dark" aria-pressed="false">Ciemny</button>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <nav class="toc" aria-label="Spis treści">
+    <a href="#start">Wprowadzenie</a>
+    <a href="#konsola">Kolejka na żywo</a>
+    <a href="#zasady">Zasady</a>
+    <hr>
+    <a href="#kolor">Kolor</a>
+    <a href="#typografia">Typografia</a>
+    <a href="#komponenty">Komponenty</a>
+    <hr>
+    <a href="#ekrany">Pozostałe ekrany</a>
+    <a href="#trendy">Trendy i decyzje</a>
+    <a href="#wdrozenie">Wdrożenie</a>
+  </nav>
+
+  <main>
+    <section id="start" class="intro" aria-labelledby="h-start">
+      <div>
+        <h1 id="h-start">Tablica wezwań</h1>
+        <p class="lede">Nowy język wizualny panelu eQue dla administratorów i operatorów. Bierze się z rzeczy, które każdy zna z rejestracji i urzędów: papierowego bileciku z numerem i wyświetlacza, który mówi, kto jest teraz wzywany. Dlatego kod biletu jest największym elementem interfejsu, a żółty sygnał pojawia się tylko wtedy, gdy ktoś jest wzywany.</p>
+      </div>
+      <dl class="intro-meta">
+        <dt>Dotyczy</dt><dd>Panel webowy (React + Tailwind 4)</dd>
+        <dt>Role</dt><dd>Administrator, operator</dd>
+        <dt>Wersja</dt><dd>1.0, październik 2026</dd>
+      </dl>
+    </section>
+
+    <section id="konsola" aria-labelledby="h-konsola">
+      <div class="sec-head">
+        <h2 id="h-konsola">Kolejka na żywo</h2>
+        <p>Najważniejszy ekran: operator spędza na nim całą zmianę. Wypróbuj go: wezwij następną osobę, wstrzymaj zapisy, przełącz lokalizację, cofnij akcję z powiadomienia. Skróty działają, gdy kursor jest nad ekranem.</p>
+      </div>
+      <div class="app-wrap">
+        <div class="app app-stage" id="consoleApp" tabindex="-1">
+          <aside class="app-side" aria-label="Nawigacja operatora">
+            <a class="brand" href="#konsola"><svg width="28" height="28" aria-hidden="true"><use href="#i-logo"/></svg><b>eQue</b></a>
+            <nav class="app-nav">
+              <button type="button" aria-current="page"><svg class="i"><use href="#i-queue"/></svg>Kolejka na żywo<span class="count" id="navCount">6</span></button>
+              <button type="button"><svg class="i"><use href="#i-grid"/></svg>Pulpit</button>
+              <button type="button"><svg class="i"><use href="#i-cog"/></svg>Ustawienia</button>
+            </nav>
+            <div class="app-user"><span class="avatar">AN</span><div class="who"><b>Anna Nowak</b><span>Operator</span></div><button class="icon-btn" type="button" aria-label="Wyloguj"><svg class="i"><use href="#i-out"/></svg></button></div>
+          </aside>
+          <div class="app-main">
+            <div class="app-head">
+              <h3>Kolejka na żywo</h3>
+              <span class="live" id="liveInd" title="Zmiany docierają same, bez odświeżania"><i></i>Na żywo</span>
+            </div>
+            <div class="app-body">
+              <div class="row-between" style="flex-wrap:wrap">
+                <div class="seg" role="tablist" aria-label="Lokalizacja" id="locTabs"></div>
+              </div>
+              <div class="console">
+                <div style="display:flex;flex-direction:column;gap:var(--s-5);min-width:0">
+                  <div class="board" id="board" aria-live="polite"></div>
+                  <div class="qlist-head">
+                    <div class="seg" role="tablist" aria-label="Lista" id="listTabs">
+                      <button type="button" role="tab" aria-selected="true" data-list="wait">Oczekujący <span class="num" id="cWait">0</span></button>
+                      <button type="button" role="tab" aria-selected="false" data-list="done">Zakończone <span class="num" id="cDone">0</span></button>
+                    </div>
+                    <span style="color:var(--ink-3);font-size:var(--t-13)">Kolejność według godziny dołączenia. Czerwony czas: ponad 15 min.</span>
+                  </div>
+                  <div id="qlistHost"></div>
+                </div>
+                <div class="side-stack">
+                  <div class="side-card">
+                    <div class="row-between"><h4>Nowe zapisy</h4><button class="switch" id="acceptSw" role="switch" aria-checked="true" aria-label="Przyjmuj nowe zapisy"></button></div>
+                    <p id="acceptTxt">Kiosk pokazuje kod zapisu. Wyłącz pod koniec zmiany; osoby już czekające obsłużysz normalnie.</p>
+                  </div>
+                  <div class="side-card">
+                    <h4>Twoja zmiana</h4>
+                    <div class="tally"><div><strong id="tDone">0</strong><span>Obsłużono</span></div><div><strong id="tMiss">0</strong><span>Nie zgłosiło się</span></div></div>
+                  </div>
+                  <div class="side-card">
+                    <h4>Skróty</h4>
+                    <div class="shortcuts">
+                      <div>Obsłużono, wezwij następnego <kbd>Enter</kbd></div>
+                      <div>Nie zgłosił się <kbd>N</kbd></div>
+                      <div>Wstrzymaj lub wznów zapisy <kbd>P</kbd></div>
+                      <div>Szukaj i przejdź <span><kbd>Ctrl</kbd> <kbd>K</kbd></span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="zasady" aria-labelledby="h-zasady">
+      <div class="sec-head">
+        <h2 id="h-zasady">Zasady</h2>
+        <p>Cztery reguły, do których wraca się przy każdej decyzji projektowej.</p>
+      </div>
+      <div class="principles">
+        <div class="principle"><h3>Kod biletu jest bohaterem</h3><p>Operator i klient rozmawiają numerami. „A05” ma być czytelne z dwóch metrów: rozciągnięty, gruby krój i cyfry o stałej szerokości. Imię i godzina są dodatkiem.</p></div>
+        <div class="principle"><h3>Żółty znaczy „wzywam”</h3><p>Sygnałowy żółty pojawia się tylko przy wezwaniu: panel „Teraz wzywany”, przycisk wezwania, wezwany bilet. Dzięki temu wzrok sam trafia tam, gdzie dzieje się akcja. Zielony i czerwony opisują wynik, a nie dekorują.</p></div>
+        <div class="principle"><h3>Jedna akcja na ekran jest oczywista</h3><p>Każdy ekran ma jedną główną czynność i ona jest największa. Pozostałe akcje są podpisane słowami, nie tylko ikoną. Najczęstsza akcja ma skrót klawiszowy.</p></div>
+        <div class="principle"><h3>Cofnij zamiast pytać</h3><p>Akcje odwracalne (wezwanie, oznaczenie wyniku, wstrzymanie zapisów) wykonują się od razu i pokazują powiadomienie z przyciskiem „Cofnij”. Okno potwierdzenia zostaje tylko dla usuwania.</p></div>
+      </div>
+    </section>
+
+    <section id="kolor" aria-labelledby="h-kolor">
+      <div class="sec-head">
+        <h2 id="h-kolor">Kolor</h2>
+        <p>Atramentowy granat jako baza, chłodny papier jako tło i jeden kolor sygnałowy. Wszystkie kolory są tokenami z wersją jasną i ciemną.</p>
+      </div>
+      <div class="swatches">
+        <div class="sw"><div class="sw-chip" style="background:var(--ink);color:var(--paper)">Aa</div><b>Atrament</b><small>Tekst główny, główne przyciski, logo</small><code>--ink #141C33</code></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--paper);color:var(--ink)">Aa</div><b>Papier</b><small>Tło aplikacji, chłodne, lekko niebieskie</small><code>--paper #EEF0F4</code></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--surface);color:var(--ink)">Aa</div><b>Powierzchnia</b><small>Panele, tabele, formularze</small><code>--surface #FFFFFF</code></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--signal);color:var(--signal-ink);border-color:var(--signal)">A05</div><b>Sygnał</b><small>Tylko wezwanie. Tekst na nim zawsze atramentowy</small><code>--signal #FFC83D</code></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--ok-soft);color:var(--ok)">Aa</div><b>Obsłużono</b><small>Wynik pozytywny, online, aktywne</small><code>--ok #1D7A51</code></div>
+        <div class="sw"><div class="sw-chip" style="background:var(--miss-soft);color:var(--miss)">Aa</div><b>Nie zgłosił się</b><small>Wynik negatywny, błąd, usuwanie</small><code>--miss #B23227</code></div>
+      </div>
+      <h3 class="sub">Statusy w eQue</h3>
+      <div class="scroll-x">
+        <table class="status-map">
+          <thead><tr><th>Stan</th><th>Wygląd</th><th>Kiedy</th></tr></thead>
+          <tbody>
+            <tr><td>Bilet oczekuje</td><td><span class="st st-wait">Oczekuje</span></td><td>Normalny stan, więc neutralny. Kolor dostaje dopiero zbyt długie czekanie.</td></tr>
+            <tr><td>Bilet wezwany</td><td><span class="st st-called">Wezwany</span></td><td>Jedyny status w kolorze sygnałowym. W danej lokalizacji naraz jest tylko jeden.</td></tr>
+            <tr><td>Obsłużono</td><td><span class="st st-ok">Obsłużono</span></td><td>Bilet zamknięty z wynikiem pozytywnym.</td></tr>
+            <tr><td>Nie zgłosił się</td><td><span class="st st-miss">Nie zgłosił się</span></td><td>Bilet zamknięty bez obsługi.</td></tr>
+            <tr><td>Zapisy wstrzymane</td><td><span class="st st-paused">Zapisy wstrzymane</span></td><td>Paski jak na taśmie odgradzającej. Ten sam wzór widać na górze panelu wezwań.</td></tr>
+            <tr><td>Tablet / operator online</td><td><span class="st st-ok">Online</span></td><td>Połączenie aktywne (heartbeat).</td></tr>
+            <tr><td>Offline / dezaktywowany</td><td><span class="st st-off">Offline</span></td><td>Pusta kropka: element istnieje, ale nie działa.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="typografia" aria-labelledby="h-typo">
+      <div class="sec-head">
+        <h2 id="h-typo">Typografia</h2>
+        <p>Jedna rodzina, Archivo, z pełnymi polskimi znakami. Charakter daje oś szerokości: kody biletów są rozciągnięte jak na wyświetlaczu, tabele mogą być lekko zwężone. Skala oparta na 15 px, z krokiem około 1,25.</p>
+      </div>
+      <div class="width-axis" aria-label="Oś szerokości kroju">
+        <div><strong style="font-stretch:88%">A05</strong><span>88%, gęste tabele</span></div>
+        <div><strong style="font-stretch:100%">A05</strong><span>100%, interfejs</span></div>
+        <div><strong style="font-stretch:112%">A05</strong><span>112%, nagłówki</span></div>
+        <div><strong style="font-stretch:125%">A05</strong><span>125%, kody biletów</span></div>
+      </div>
+      <div class="type-specimen">
+        <div class="ts-row"><div class="meta"><b>Kod na tablicy</b>56–104 px, 850, szer. 125%</div><div class="ts-sample" style="font-size:var(--t-code);font-weight:850;font-stretch:125%;line-height:.9;letter-spacing:-.02em">B12</div></div>
+        <div class="ts-row"><div class="meta"><b>Tytuł strony</b>25 px, 750, szer. 112%</div><div class="ts-sample" style="font-size:var(--t-25);font-weight:750;font-stretch:112%;letter-spacing:-.015em">Lokalizacje</div></div>
+        <div class="ts-row"><div class="meta"><b>Nagłówek panelu</b>17 px, 700</div><div class="ts-sample" style="font-size:var(--t-17);font-weight:700">Wymaga uwagi</div></div>
+        <div class="ts-row"><div class="meta"><b>Treść</b>15 px, 400, interlinia 1,55</div><div class="ts-sample" style="font-size:var(--t-15)">Kod kolejki wpisują klienci w aplikacji mobilnej. Nadawany jest automatycznie i się nie zmienia.</div></div>
+        <div class="ts-row"><div class="meta"><b>Etykieta pola</b>13 px, 600, zdaniem</div><div class="ts-sample" style="font-size:var(--t-13);font-weight:600">Przypisany tablet</div></div>
+        <div class="ts-row"><div class="meta"><b>Podpis</b>13 px, 400, kolor pomocniczy</div><div class="ts-sample" style="font-size:var(--t-13);color:var(--ink-3)">Widziano 4 min temu</div></div>
+      </div>
+    </section>
+
+    <section id="komponenty" aria-labelledby="h-komp">
+      <div class="sec-head">
+        <h2 id="h-komp">Komponenty</h2>
+        <p>Podstawowy zestaw, z którego składają się wszystkie ekrany. Promień zaokrąglenia zależy od roli: kontrolki 8 px, panele 12 px, bilety mają perforację.</p>
+      </div>
+      <div class="demo-grid">
+        <div class="demo">
+          <div class="demo-stage">
+            <button class="btn btn-call" type="button"><svg class="i"><use href="#i-bell"/></svg>Wezwij następnego</button>
+            <button class="btn btn-primary" type="button">Zapisz zmiany</button>
+            <button class="btn btn-secondary" type="button">Anuluj</button>
+            <button class="btn btn-ghost" type="button">Pomiń</button>
+            <button class="btn btn-danger" type="button">Usuń lokalizację</button>
+            <button class="btn btn-primary" type="button" disabled>Zapisz zmiany</button>
+          </div>
+          <div class="demo-cap"><b>Przyciski</b><span>Żółty tylko dla wezwania. Atramentowy dla głównej akcji formularza. Napis mówi, co się stanie.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage col">
+            <div class="field"><label for="d-name">Nazwa lokalizacji</label><input class="input" id="d-name" value="Gabinet kardiologiczny"></div>
+            <div class="field"><label for="d-login">Login</label><input class="input is-invalid" id="d-login" value="jan kowalski" aria-describedby="d-login-err"><span class="err" id="d-login-err"><svg class="i" style="width:16px;height:16px"><use href="#i-alert"/></svg>Login nie może zawierać spacji. Użyj kropki, np. jan.kowalski.</span></div>
+          </div>
+          <div class="demo-cap"><b>Pola formularza</b><span>Etykieta nad polem, błąd pod polem z instrukcją naprawy.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage col">
+            <div class="row-between"><span class="ticket">A06</span><span class="ticket is-called">A05</span><span class="ticket is-done">A04</span><span class="qletter">A</span><span class="qletter is-off">D</span></div>
+            <div class="row-between" style="flex-wrap:wrap;justify-content:flex-start;gap:14px"><span class="st st-wait">Oczekuje</span><span class="st st-called">Wezwany</span><span class="st st-ok">Obsłużono</span><span class="st st-miss">Nie zgłosił się</span><span class="st st-paused">Zapisy wstrzymane</span></div>
+          </div>
+          <div class="demo-cap"><b>Bilety, litery kolejek i statusy</b><span>Bilet z perforacją: oczekujący, wezwany, zakończony. Litera kolejki w kwadracie.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage col">
+            <div class="seg" role="tablist" aria-label="Przykład przełącznika"><button type="button" role="tab" aria-selected="true"><span class="letter">A</span>Rejestracja</button><button type="button" role="tab" aria-selected="false"><span class="letter">B</span>Kardiologia</button></div>
+            <div class="row-between"><span>Przyjmuj nowe zapisy</span><button class="switch demo-switch" type="button" role="switch" aria-checked="true" aria-label="Przyjmuj nowe zapisy (przykład)"></button></div>
+          </div>
+          <div class="demo-cap"><b>Przełącznik segmentowy i włącznik</b><span>Lokalizacje operatora jako segmenty zamiast listy rozwijanej: widać wszystkie od razu.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage col">
+            <div class="row-between"><span class="live"><i></i>Na żywo</span><span class="live is-lost"><i></i>Łączenie ponownie…</span></div>
+            <p style="font-size:var(--t-13);color:var(--ink-3)">Zastępuje przycisk „Odśwież”. Ręczne odświeżanie pojawia się tylko, gdy połączenie WebSocket nie wróci w ciągu kilku sekund.</p>
+          </div>
+          <div class="demo-cap"><b>Wskaźnik połączenia</b><span>Mówi prawdę o synchronizacji na żywo.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage col">
+            <div class="toast" role="status"><span class="t-text">Obsłużono A05. Wezwano A06.</span><button class="btn" type="button">Cofnij</button></div>
+            <button class="btn btn-secondary btn-sm" type="button" id="demoToast" style="align-self:flex-start">Pokaż powiadomienie</button>
+          </div>
+          <div class="demo-cap"><b>Powiadomienie z cofnięciem</b><span>Znika po 6 s. Ten sam czasownik co w przycisku: „Obsłuż” daje „Obsłużono”.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage">
+            <div class="empty" style="padding:0">
+              <h4>Nikt nie czeka</h4>
+              <p>Gdy ktoś dołączy przez kiosk, pojawi się tutaj. Kiosk w tej lokalizacji jest online.</p>
+              <button class="btn btn-secondary btn-sm" type="button">Pokaż kod zapisu</button>
+            </div>
+          </div>
+          <div class="demo-cap"><b>Pusty stan</b><span>Wyjaśnia, co się tu pojawi, i daje następny krok.</span></div>
+        </div>
+        <div class="demo">
+          <div class="demo-stage col">
+            <div class="note"><svg class="i" style="width:16px;height:16px;margin-top:2px"><use href="#i-info"/></svg><span>Kod kolejki „B” jest nadawany automatycznie i się nie zmienia. Do zapisu służy krótki kod z kiosku.</span></div>
+            <div class="form-error"><svg class="i" style="width:16px;height:16px;margin-top:1px"><use href="#i-alert"/></svg><span>Login lub hasło są nieprawidłowe. Sprawdź, czy nie masz włączonego Caps Lock.</span></div>
+          </div>
+          <div class="demo-cap"><b>Notatka i błąd</b><span>Notatka na tle neutralnym, błąd w kolorze „nie zgłosił się”.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="ekrany" aria-labelledby="h-ekrany">
+      <div class="sec-head">
+        <h2 id="h-ekrany">Pozostałe ekrany</h2>
+        <p>Te same zasady w panelu administratora. W tabeli lokalizacji kliknij wiersz, żeby otworzyć panel edycji.</p>
+      </div>
+      <div class="screen-tabs">
+        <div class="seg" role="tablist" aria-label="Ekran" id="screenTabs">
+          <button type="button" role="tab" aria-selected="true" data-screen="pulpit">Pulpit administratora</button>
+          <button type="button" role="tab" aria-selected="false" data-screen="lokalizacje">Lokalizacje</button>
+          <button type="button" role="tab" aria-selected="false" data-screen="logowanie">Logowanie</button>
+        </div>
+      </div>
+
+      <div class="app-wrap" data-screen-panel="pulpit">
+        <div class="app">
+          <aside class="app-side" aria-label="Nawigacja administratora">
+            <a class="brand" href="#ekrany"><svg width="28" height="28" aria-hidden="true"><use href="#i-logo"/></svg><b>eQue</b></a>
+            <nav class="app-nav">
+              <button type="button" aria-current="page"><svg class="i"><use href="#i-grid"/></svg>Pulpit</button>
+              <span class="grp">Konfiguracja</span>
+              <button type="button"><svg class="i"><use href="#i-pin"/></svg>Lokalizacje</button>
+              <button type="button"><svg class="i"><use href="#i-tablet"/></svg>Tablety</button>
+              <button type="button"><svg class="i"><use href="#i-users"/></svg>Użytkownicy</button>
+              <span class="grp">Konto</span>
+              <button type="button"><svg class="i"><use href="#i-cog"/></svg>Ustawienia</button>
+            </nav>
+            <div class="app-user"><span class="avatar">AD</span><div class="who"><b>Administrator</b><span>Pełny dostęp</span></div><button class="icon-btn" type="button" aria-label="Wyloguj"><svg class="i"><use href="#i-out"/></svg></button></div>
+          </aside>
+          <div class="app-main">
+            <div class="app-head"><h3>Pulpit</h3><span class="live"><i></i>Na żywo</span></div>
+            <div class="app-body">
+              <div class="summary-line">
+                <div><strong>9</strong><span>osób czeka teraz</span></div>
+                <div><strong>3 z 4</strong><span>kiosków online</span></div>
+                <div><strong>2</strong><span>operatorów pracuje</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:var(--s-3)">
+                <h4 style="font-size:var(--t-17)">Wymaga uwagi</h4>
+                <div class="attention">
+                  <div class="attention-item"><span class="ico"><svg class="i"><use href="#i-tablet"/></svg></span><div class="txt"><b>Kiosk „Tablet parter” jest offline od 38 min</b><span>Punkt pobrań. Klienci nie mogą się zapisać.</span></div><button class="btn btn-secondary btn-sm" type="button">Sprawdź tablet</button></div>
+                  <div class="attention-item"><span class="ico"><svg class="i"><use href="#i-pin"/></svg></span><div class="txt"><b>Poradnia okulistyczna nie ma kiosku</b><span>Lokalizacja jest aktywna, ale nikt nie może do niej dołączyć.</span></div><button class="btn btn-secondary btn-sm" type="button">Przypisz tablet</button></div>
+                  <div class="attention-item"><span class="ico"><svg class="i"><use href="#i-users"/></svg></span><div class="txt"><b>Punkt pobrań nie ma operatora</b><span>Bez przypisanej osoby nikt nie wezwie oczekujących.</span></div><button class="btn btn-secondary btn-sm" type="button">Przypisz operatora</button></div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:var(--s-3)">
+                <h4 style="font-size:var(--t-17)">Lokalizacje teraz</h4>
+                <div class="dtable-wrap">
+                  <table class="dtable">
+                    <thead><tr><th>Lokalizacja</th><th>Teraz wzywany</th><th>Czeka</th><th>Najdłużej</th><th>Kiosk</th><th>Zapisy</th></tr></thead>
+                    <tbody>
+                      <tr><td><div class="cell-main"><span class="qletter">A</span><b>Rejestracja ogólna</b></div></td><td><span class="ticket is-called">A05</span></td><td class="num">6</td><td class="num">18 min</td><td><span class="st st-ok">Online</span></td><td><span class="st">Otwarte</span></td></tr>
+                      <tr><td><div class="cell-main"><span class="qletter">B</span><b>Gabinet kardiologiczny</b></div></td><td><span class="muted-i">Nikt</span></td><td class="num">2</td><td class="num">7 min</td><td><span class="st st-ok">Online</span></td><td><span class="st st-paused">Wstrzymane</span></td></tr>
+                      <tr><td><div class="cell-main"><span class="qletter">C</span><b>Punkt pobrań</b></div></td><td><span class="muted-i">Nikt</span></td><td class="num">1</td><td class="num" style="color:var(--miss);font-weight:650">41 min</td><td><span class="st st-off">Offline</span></td><td><span class="st">Otwarte</span></td></tr>
+                      <tr class="is-off"><td><div class="cell-main"><span class="qletter is-off">D</span><b style="color:var(--ink-3)">Poradnia okulistyczna</b></div></td><td><span class="muted-i">Nikt</span></td><td class="num">0</td><td class="muted-i">–</td><td><span class="st st-off">Brak kiosku</span></td><td><span class="st">Otwarte</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="app-wrap" data-screen-panel="lokalizacje" hidden>
+        <div class="app app-stage" id="locApp">
+          <aside class="app-side" aria-label="Nawigacja administratora">
+            <a class="brand" href="#ekrany"><svg width="28" height="28" aria-hidden="true"><use href="#i-logo"/></svg><b>eQue</b></a>
+            <nav class="app-nav">
+              <button type="button"><svg class="i"><use href="#i-grid"/></svg>Pulpit</button>
+              <span class="grp">Konfiguracja</span>
+              <button type="button" aria-current="page"><svg class="i"><use href="#i-pin"/></svg>Lokalizacje<span class="count">4</span></button>
+              <button type="button"><svg class="i"><use href="#i-tablet"/></svg>Tablety<span class="count">4</span></button>
+              <button type="button"><svg class="i"><use href="#i-users"/></svg>Użytkownicy<span class="count">3</span></button>
+              <span class="grp">Konto</span>
+              <button type="button"><svg class="i"><use href="#i-cog"/></svg>Ustawienia</button>
+            </nav>
+            <div class="app-user"><span class="avatar">AD</span><div class="who"><b>Administrator</b><span>Pełny dostęp</span></div><button class="icon-btn" type="button" aria-label="Wyloguj"><svg class="i"><use href="#i-out"/></svg></button></div>
+          </aside>
+          <div class="app-main">
+            <div class="app-head"><h3>Lokalizacje</h3><button class="btn btn-primary" type="button"><svg class="i"><use href="#i-plus"/></svg>Dodaj lokalizację</button></div>
+            <div class="app-body">
+              <div class="filters">
+                <div class="search"><svg class="i"><use href="#i-search"/></svg><input class="input" id="locSearch" placeholder="Szukaj po nazwie" aria-label="Szukaj lokalizacji"></div>
+                <div class="seg" role="tablist" aria-label="Filtr statusu" id="locFilter">
+                  <button type="button" role="tab" aria-selected="true" data-f="all">Wszystkie</button>
+                  <button type="button" role="tab" aria-selected="false" data-f="active">Aktywne</button>
+                  <button type="button" role="tab" aria-selected="false" data-f="off">Dezaktywowane</button>
+                </div>
+              </div>
+              <div class="dtable-wrap">
+                <table class="dtable">
+                  <thead><tr><th>Lokalizacja</th><th>Kiosk</th><th>Operatorzy</th><th>Status</th></tr></thead>
+                  <tbody id="locRows"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="drawer-scrim" id="drawerScrim"></div>
+          <aside class="drawer" id="drawer" aria-label="Edycja lokalizacji" aria-hidden="true">
+            <div class="drawer-head"><span class="qletter" id="dLetter">A</span><h4 id="dTitle">Rejestracja ogólna</h4><button class="icon-btn" type="button" id="dClose" aria-label="Zamknij panel"><svg class="i"><use href="#i-x"/></svg></button></div>
+            <div class="drawer-body">
+              <div class="note"><svg class="i" style="width:16px;height:16px;margin-top:2px"><use href="#i-info"/></svg><span id="dNote"></span></div>
+              <div class="field"><label for="dName">Nazwa lokalizacji</label><input class="input" id="dName"></div>
+              <div class="field"><label for="dDesc">Opis</label><textarea class="input" id="dDesc" rows="2"></textarea><span class="hint">Widoczny dla operatorów, np. piętro i skrzydło.</span></div>
+              <div class="field"><label for="dTablet">Kiosk</label><select class="input" id="dTablet"><option>Tablet hol główny</option><option>Tablet II piętro</option><option>Tablet parter</option><option>Brak kiosku</option></select></div>
+              <div class="field"><span class="lbl" id="dOpsLbl">Operatorzy</span><div class="checklist" role="group" aria-labelledby="dOpsLbl"><label><input type="checkbox" id="op1" checked>Jan Kowalski</label><label><input type="checkbox" id="op2" checked>Anna Nowak</label><label><input type="checkbox" id="op3">Piotr Zieliński</label></div></div>
+              <div class="danger-zone"><h5>Usuń lokalizację</h5><p style="font-size:var(--t-13);color:var(--ink-3)">Usuwa lokalizację i odłącza kiosk. Tego nie da się cofnąć, więc zapytamy jeszcze raz.</p><button class="btn btn-danger btn-sm" type="button" style="align-self:flex-start">Usuń lokalizację</button></div>
+            </div>
+            <div class="drawer-foot"><button class="btn btn-secondary" type="button" id="dCancel">Anuluj</button><span class="grow"></span><button class="btn btn-primary" type="button" id="dSave">Zapisz zmiany</button></div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="app-wrap" data-screen-panel="logowanie" hidden>
+        <div class="app" style="grid-template-columns:minmax(0,1fr)">
+          <div class="login">
+            <div class="login-art">
+              <span class="brand"><svg width="32" height="32" aria-hidden="true"><use href="#i-logo"/></svg><b>eQue</b></span>
+              <div class="big" aria-hidden="true">A05</div>
+              <p>Panel dla personelu placówki. Wzywaj kolejne osoby i zarządzaj kolejkami na żywo.</p>
+            </div>
+            <div class="login-form">
+              <form id="loginForm" novalidate>
+                <h4>Zaloguj się</h4>
+                <p class="sub">Dane logowania dostajesz od administratora.</p>
+                <div class="form-error" id="loginErr" hidden><svg class="i" style="width:16px;height:16px;margin-top:1px"><use href="#i-alert"/></svg><span>Login lub hasło są nieprawidłowe. Sprawdź, czy nie masz włączonego Caps Lock.</span></div>
+                <div class="field"><label for="lUser">Login</label><input class="input" id="lUser" autocomplete="username" placeholder="np. jan.kowalski"></div>
+                <div class="field"><label for="lPass">Hasło</label><input class="input" id="lPass" type="password" autocomplete="current-password"></div>
+                <button class="btn btn-primary btn-lg" type="submit">Zaloguj się</button>
+                <p class="sub" style="font-size:var(--t-13)">Wpisz dowolne dane, żeby zobaczyć komunikat błędu.</p>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="trendy" aria-labelledby="h-trendy">
+      <div class="sec-head">
+        <h2 id="h-trendy">Trendy i decyzje</h2>
+        <p>Co w 2026 roku zmienia się w panelach administracyjnych i jak przełożyłem to na eQue. Przy każdej decyzji liczyła się przede wszystkim łatwość obsługi.</p>
+      </div>
+      <div class="dtable-wrap">
+        <table class="dtable trend-table">
+          <thead><tr><th>Trend</th><th>W eQue</th><th>Źródło</th></tr></thead>
+          <tbody>
+            <tr><td>Od raportu do następnej akcji</td><td>Pulpit zaczyna od listy „Wymaga uwagi”, a każdy problem ma przycisk naprawy. Cztery jednakowe kafelki ze statystykami zastąpiła jedna linia podsumowania.</td><td>SaaSFrame, 925 Studios, Think Design</td></tr>
+            <tr><td>Kolor tylko dla statusu</td><td>Jeden akcent (sygnał wezwania), zielony i czerwony tylko dla wyniku. „Oczekuje” jest neutralne, bo to stan normalny.</td><td>TheKitBase, 925 Studios</td></tr>
+            <tr><td>Nigdy sam kolor</td><td>Każdy status to kropka o innym kształcie plus słowo. Wstrzymane zapisy mają wzór pasków, rozpoznawalny bez koloru.</td><td>Think Design</td></tr>
+            <tr><td>Spokój zamiast gęstości</td><td>Mniej obramowań i cieni, cienkie linie, wiersze tabel 56 px, akcje wiersza widoczne po najechaniu.</td><td>925 Studios, UXMagic</td></tr>
+            <tr><td>Stopniowe odsłanianie</td><td>Edycja w panelu bocznym po kliknięciu wiersza. Rzadkie akcje (usuwanie) na dole panelu, nie w tabeli.</td><td>925 Studios, UXMagic</td></tr>
+            <tr><td>Paleta poleceń i klawiatura</td><td>Ctrl+K na każdym ekranie. Operator ma skróty Enter, N i P do najczęstszych czynności.</td><td>UXMagic, 925 Studios</td></tr>
+            <tr><td>Czas rzeczywisty tam, gdzie się decyduje</td><td>Wskaźnik „Na żywo” zamiast przycisku odświeżania. Animacja tylko przy zmianie wezwanego numeru.</td><td>TheKitBase, Think Design</td></tr>
+            <tr><td>Widoki zależne od roli</td><td>Operator ląduje w kolejce, administrator na pulpicie. Różne menu, ten sam język.</td><td>925 Studios, UXMagic</td></tr>
+            <tr><td>Tokeny semantyczne i dwa motywy</td><td>Cała paleta w kilkunastu zmiennych CSS z wersją ciemną. Bez białego błysku przy ładowaniu.</td><td>TheKitBase</td></tr>
+            <tr><td>Pusty stan prowadzi dalej</td><td>Każda pusta lista mówi, co się pojawi, i daje następny krok.</td><td>UXMagic, SaaSFrame</td></tr>
+            <tr><td>Proste interfejsy kolejkowe skracają szkolenie</td><td>Jedna główna akcja na ekranie, podpisane przyciski, język placówki zamiast technicznego.</td><td>NextQS</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="sources">
+        <span>Źródła:</span>
+        <a href="https://www.saasframe.io/blog/the-anatomy-of-high-performance-saas-dashboard-design-2026-trends-patterns" target="_blank" rel="noopener">SaaSFrame: The Anatomy of High-Performance SaaS Dashboard Design, 2026</a>
+        <a href="https://dev.to/thekitbase/saas-dashboard-design-trends-in-2026-with-examples-121m" target="_blank" rel="noopener">TheKitBase: SaaS Dashboard Design Trends in 2026</a>
+        <a href="https://925studios.co/blog/saas-dashboard-design-examples-2026" target="_blank" rel="noopener">925 Studios: 35 SaaS Dashboard Design Examples, Trends and Patterns (2026)</a>
+        <a href="https://uxmagic.ai/blog/b2b-saas-ui-design-trends" target="_blank" rel="noopener">UXMagic: B2B SaaS UI Design Trends</a>
+        <a href="https://think.design/?p=6943" target="_blank" rel="noopener">Think Design: Dashboard Design in 2026, Do’s and Don’ts</a>
+        <a href="https://www.nextqs.com/en/blog/interface-intuitiva-por-que-seu-sistema-de-gestao-de-filas-precisa-ser-facil-de-usar" target="_blank" rel="noopener">NextQS: Intuitive interface for queue management systems</a>
+      </div>
+    </section>
+
+    <section id="wdrozenie" aria-labelledby="h-wdr">
+      <div class="sec-head">
+        <h2 id="h-wdr">Wdrożenie</h2>
+        <p>Tokeny są w pliku <b>tokens.css</b> obok tej strony, w formacie Tailwind 4 (<code>@theme</code>). Obecne nazwy zmiennych zostają zastąpione nowymi, więc najprościej przechodzić ekran po ekranie.</p>
+      </div>
+      <ol class="steps">
+        <li><b>Podmień tokeny</b><span>W <code>web/src/index.css</code> zostaw <code>@import "tailwindcss"</code> i zastąp blok <code>:root</code> importem <code>tokens.css</code>. Dodaj czcionkę Archivo w <code>index.html</code>.</span></li>
+        <li><b>Wydziel komponenty</b><span>Dziś każdy plik ma własne <code>StatusBadge</code>, <code>Switch</code>, <code>SlidePanel</code> i style przycisków w linii. Zrób jeden folder <code>components/ui</code>: Button, Status, Ticket, QueueLetter, Switch, Segmented, Drawer, Toast, LiveIndicator, CommandPalette.</span></li>
+        <li><b>Zacznij od Kolejki na żywo</b><span>Panel „Teraz wzywany”, lista z numerami pozycji, skróty klawiszowe i powiadomienie z „Cofnij” w miejscu <code>alertDialog</code>.</span></li>
+        <li><b>Pulpit i tabele</b><span>Lista „Wymaga uwagi” na górze, tabela lokalizacji „teraz”, podpisane przyciski „Dodaj …” w nagłówku zamiast samej ikony plusa, stałe pole wyszukiwania.</span></li>
+        <li><b>Usuń ręczne odświeżanie</b><span>Przycisk „Odśwież” zastąp wskaźnikiem połączenia z <code>ws.ts</code>. Pokaż go jako akcję dopiero po zerwaniu połączenia.</span></li>
+      </ol>
+      <pre class="code" aria-label="Przykład użycia tokenów">/* web/src/index.css */
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* przykład w JSX — klasy z tokenów Tailwind 4 */
+&lt;button className="h-10 px-4 rounded-control bg-signal text-signal-ink font-semibold"&gt;
+  Wezwij następnego
+&lt;/button&gt;
+&lt;span className="font-code text-code font-extrabold tabular-nums"&gt;A05&lt;/span&gt;</pre>
+    </section>
+  </main>
+</div>
+
+<div class="toast-host" id="toastHost" aria-live="polite"></div>
+<div class="cmdk-scrim" id="cmdk" hidden>
+  <div class="cmdk" role="dialog" aria-modal="true" aria-label="Szukaj i przejdź">
+    <div class="cmdk-in"><svg class="i"><use href="#i-search"/></svg><input id="cmdkInput" placeholder="Wpisz nazwę ekranu, lokalizacji lub akcji" aria-label="Szukaj" autocomplete="off"><kbd>Esc</kbd></div>
+    <ul id="cmdkList" role="listbox"></ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* ——— Motyw ——— */
+  const root = document.documentElement;
+  const themeBtns = document.querySelectorAll('[data-theme-set]');
+  function setTheme(t) {
+    if (t === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+    themeBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeSet === t)));
+    try { localStorage.setItem('eque-ds-theme', t); } catch (e) {}
+  }
+  themeBtns.forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themeSet)));
+  try { const saved = localStorage.getItem('eque-ds-theme'); if (saved) setTheme(saved); } catch (e) {}
+
+  /* ——— Toasty ——— */
+  const toastHost = document.getElementById('toastHost');
+  function toast(text, undo) {
+    const el = document.createElement('div');
+    el.className = 'toast'; el.setAttribute('role', 'status');
+    const span = document.createElement('span'); span.className = 't-text'; span.textContent = text; el.appendChild(span);
+    if (undo) {
+      const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.textContent = 'Cofnij';
+      b.addEventListener('click', () => { undo(); el.remove(); }); el.appendChild(b);
+    }
+    toastHost.querySelectorAll('.toast').forEach(t => t.remove());
+    toastHost.appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+  }
+  document.getElementById('demoToast').addEventListener('click', () => toast('Obsłużono A05. Wezwano A06.', () => toast('Cofnięto. Wezwany jest znowu A05.')));
+  document.querySelectorAll('.demo-switch').forEach(s => s.addEventListener('click', () => s.setAttribute('aria-checked', String(s.getAttribute('aria-checked') !== 'true'))));
+
+  /* ——— Konsola operatora ——— */
+  const now = Date.now(); const min = 60000;
+  const t = m => new Date(now - m * min);
+  const fmt = d => d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+  const state = {
+    loc: 'A', list: 'wait', done: 0, miss: 0,
+    locs: {
+      A: { name: 'Rejestracja ogólna', accepting: true, serving: { code: 'A05', name: 'Marek Wiśniewski', joined: t(24), appt: '10:30' },
+           waiting: [
+             { code: 'A06', name: 'Katarzyna Lewandowska', joined: t(18), appt: '10:45' },
+             { code: 'A07', name: null, joined: t(15) },
+             { code: 'A08', name: 'Tomasz Wójcik', joined: t(11) },
+             { code: 'A09', name: 'Ewa Kamińska', joined: t(8), appt: '11:15' },
+             { code: 'A10', name: null, joined: t(4) },
+             { code: 'A11', name: 'Zofia Dąbrowska', joined: t(1) },
+           ], finished: [
+             { code: 'A04', name: 'Paweł Mazur', outcome: 'ok', at: t(26) },
+             { code: 'A03', name: null, outcome: 'miss', at: t(33) },
+           ] },
+      B: { name: 'Gabinet kardiologiczny', accepting: false, serving: null,
+           waiting: [
+             { code: 'B03', name: 'Henryk Grabowski', joined: t(7), appt: '11:00' },
+             { code: 'B04', name: 'Maria Pawlak', joined: t(3) },
+           ], finished: [] },
+    },
+  };
+  const LONG = 15; // min: od kiedy czas oczekiwania dostaje kolor
+  const board = document.getElementById('board');
+  const qhost = document.getElementById('qlistHost');
+  const locTabs = document.getElementById('locTabs');
+  const acceptSw = document.getElementById('acceptSw');
+  const acceptTxt = document.getElementById('acceptTxt');
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const waitMin = d => Math.max(0, Math.round((Date.now() - d.getTime()) / min));
+  const snapshot = () => JSON.stringify(state, (k, v) => v);
+  function restore(json) {
+    const s = JSON.parse(json);
+    for (const k of Object.keys(s.locs)) for (const L of ['serving']) if (s.locs[k][L]) s.locs[k][L].joined = new Date(s.locs[k][L].joined);
+    for (const k of Object.keys(s.locs)) { s.locs[k].waiting.forEach(w => w.joined = new Date(w.joined)); s.locs[k].finished.forEach(f => f.at = new Date(f.at)); }
+    Object.assign(state, s); render();
+  }
+
+  function renderTabs() {
+    locTabs.innerHTML = Object.entries(state.locs).map(([k, L]) =>
+      `<button type="button" role="tab" aria-selected="${k === state.loc}" data-loc="${k}"><span class="letter">${k}</span>${esc(L.name)}<span class="num" style="color:var(--ink-3)">${L.waiting.length}</span></button>`).join('');
+  }
+  function renderBoard(animate) {
+    const L = state.locs[state.loc];
+    const paused = L.accepting ? '' : '<div class="board-paused" aria-hidden="true"></div>';
+    if (L.serving) {
+      const s = L.serving;
+      board.className = 'board';
+      board.innerHTML = `${paused}
+        <div class="board-label"><span>Teraz wzywany</span><span class="num">czeka ${waitMin(s.joined)} min</span></div>
+        <div class="board-code${animate ? ' flip' : ''}">${s.code}</div>
+        <div class="board-who"><b>${s.name ? esc(s.name) : 'Bez nazwiska'}</b><span>Dołączył o ${fmt(s.joined)}${s.appt ? ', wizyta ' + s.appt : ''}</span></div>
+        <div class="board-actions">
+          <button class="btn btn-primary btn-lg" type="button" data-act="done"><svg class="i"><use href="#i-check"/></svg>${L.waiting.length ? 'Obsłużono, wezwij następnego' : 'Obsłużono'}<kbd>Enter</kbd></button>
+          <button class="btn btn-outline-ink btn-lg" type="button" data-act="miss"><svg class="i"><use href="#i-x"/></svg>Nie zgłosił się<kbd>N</kbd></button>
+        </div>`;
+    } else {
+      board.className = 'board is-empty';
+      board.innerHTML = `${paused}
+        <div class="board-label"><span>Teraz wzywany</span></div>
+        <div class="board-code">–</div>
+        <div class="board-who"><b>${L.waiting.length ? 'Nikt nie jest wzywany' : 'Nikt nie czeka'}</b><span>${L.waiting.length ? 'Pierwsza w kolejce jest osoba z biletem ' + L.waiting[0].code + '.' : (L.accepting ? 'Gdy ktoś dołączy przez kiosk, pojawi się na liście.' : 'Zapisy są wstrzymane. Wznów je, żeby kiosk znowu pokazał kod.')}</span></div>
+        ${L.waiting.length ? '<div class="board-actions"><button class="btn btn-call btn-lg" type="button" data-act="callFirst"><svg class="i"><use href="#i-bell"/></svg>Wezwij ' + L.waiting[0].code + '<kbd>Enter</kbd></button></div>' : ''}`;
+    }
+  }
+  function renderList() {
+    const L = state.locs[state.loc];
+    document.getElementById('cWait').textContent = L.waiting.length;
+    document.getElementById('cDone').textContent = L.finished.length;
+    document.querySelectorAll('#listTabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.list === state.list)));
+    if (state.list === 'wait') {
+      if (!L.waiting.length) { qhost.innerHTML = `<div class="panel"><div class="empty"><h4>Nikt nie czeka</h4><p>${L.accepting ? 'Gdy ktoś dołączy przez kiosk, pojawi się tutaj.' : 'Zapisy są wstrzymane, więc nowe osoby nie dołączą.'}</p></div></div>`; return; }
+      qhost.innerHTML = '<ol class="qlist">' + L.waiting.map((w, i) => {
+        const m = waitMin(w.joined);
+        return `<li><span class="qpos">${i + 1}</span><span class="ticket">${w.code}</span>
+          <div class="qname"><b>${w.name ? esc(w.name) : 'Bez nazwiska'}</b><span>${fmt(w.joined)}${w.appt ? ', wizyta ' + w.appt : ''}</span></div>
+          <span class="qwait${m >= LONG ? ' is-long' : ''}" title="Czas oczekiwania">${m} min</span>
+          <button class="btn btn-secondary btn-sm" type="button" data-call="${w.code}">Wezwij</button></li>`;
+      }).join('') + '</ol>';
+    } else {
+      if (!L.finished.length) { qhost.innerHTML = '<div class="panel"><div class="empty"><h4>Nic jeszcze nie zakończono</h4><p>Tu zobaczysz osoby obsłużone podczas tej zmiany.</p></div></div>'; return; }
+      qhost.innerHTML = '<ol class="qlist">' + L.finished.map(f => `<li><span class="qpos"></span><span class="ticket is-done">${f.code}</span>
+        <div class="qname"><b>${f.name ? esc(f.name) : 'Bez nazwiska'}</b><span>Zakończono o ${fmt(f.at)}</span></div><span></span>
+        <span class="st ${f.outcome === 'ok' ? 'st-ok' : 'st-miss'}">${f.outcome === 'ok' ? 'Obsłużono' : 'Nie zgłosił się'}</span></li>`).join('') + '</ol>';
+    }
+  }
+  function renderSide() {
+    const L = state.locs[state.loc];
+    acceptSw.setAttribute('aria-checked', String(L.accepting));
+    acceptTxt.textContent = L.accepting
+      ? 'Kiosk pokazuje kod zapisu. Wyłącz pod koniec zmiany; osoby już czekające obsłużysz normalnie.'
+      : 'Kiosk pokazuje komunikat „Zapisy wstrzymane”. Osoby już czekające obsługujesz normalnie.';
+    document.getElementById('tDone').textContent = state.done;
+    document.getElementById('tMiss').textContent = state.miss;
+    document.getElementById('navCount').textContent = Object.values(state.locs).reduce((a, l) => a + l.waiting.length, 0);
+  }
+  function render(animate) { renderTabs(); renderBoard(animate); renderList(); renderSide(); }
+
+  function resolve(outcome) {
+    const L = state.locs[state.loc]; if (!L.serving) return;
+    const before = snapshot();
+    const prev = L.serving.code;
+    L.finished.unshift({ code: prev, name: L.serving.name, outcome, at: new Date() });
+    if (outcome === 'ok') state.done++; else state.miss++;
+    L.serving = L.waiting.shift() || null;
+    render(true);
+    const verb = outcome === 'ok' ? 'Obsłużono' : 'Oznaczono, że nie zgłosił się:';
+    toast(`${verb} ${prev}.${L.serving ? ' Wezwano ' + L.serving.code + '.' : ''}`, () => restore(before));
+  }
+  function call(code) {
+    const L = state.locs[state.loc];
+    const idx = L.waiting.findIndex(w => w.code === code); if (idx < 0) return;
+    const before = snapshot();
+    const [w] = L.waiting.splice(idx, 1);
+    if (L.serving) L.waiting.unshift(L.serving);
+    L.serving = w; render(true);
+    toast(`Wezwano ${w.code}.`, () => restore(before));
+  }
+  function toggleAccepting() {
+    const L = state.locs[state.loc]; const before = snapshot();
+    L.accepting = !L.accepting; render();
+    toast(L.accepting ? `Wznowiono zapisy: ${L.name}.` : `Wstrzymano zapisy: ${L.name}.`, () => restore(before));
+  }
+  board.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'done') resolve('ok');
+    else if (b.dataset.act === 'miss') resolve('miss');
+    else if (b.dataset.act === 'callFirst') call(state.locs[state.loc].waiting[0].code);
+  });
+  qhost.addEventListener('click', e => { const b = e.target.closest('[data-call]'); if (b) call(b.dataset.call); });
+  locTabs.addEventListener('click', e => { const b = e.target.closest('[data-loc]'); if (!b) return; state.loc = b.dataset.loc; state.list = 'wait'; render(); });
+  document.getElementById('listTabs').addEventListener('click', e => { const b = e.target.closest('[data-list]'); if (!b) return; state.list = b.dataset.list; renderList(); });
+  acceptSw.addEventListener('click', toggleAccepting);
+
+  const consoleApp = document.getElementById('consoleApp');
+  let overConsole = false;
+  consoleApp.addEventListener('mouseenter', () => overConsole = true);
+  consoleApp.addEventListener('mouseleave', () => overConsole = false);
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openCmdk(); return; }
+    if (!cmdk.hidden) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const inConsole = overConsole || consoleApp.contains(document.activeElement);
+    if (!inConsole || e.ctrlKey || e.metaKey || e.altKey) return;
+    const L = state.locs[state.loc];
+    if (e.key === 'Enter') {
+      if (document.activeElement && document.activeElement.tagName === 'BUTTON' && consoleApp.contains(document.activeElement)) return;
+      e.preventDefault();
+      if (L.serving) resolve('ok'); else if (L.waiting.length) call(L.waiting[0].code);
+    } else if (e.key.toLowerCase() === 'n') { e.preventDefault(); resolve('miss'); }
+    else if (e.key.toLowerCase() === 'p') { e.preventDefault(); toggleAccepting(); }
+  });
+  render();
+  setInterval(() => { renderBoard(false); if (state.list === 'wait') renderList(); }, 30000);
+
+  /* ——— Przełączanie ekranów ——— */
+  const screenTabs = document.getElementById('screenTabs');
+  function showScreen(name) {
+    screenTabs.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.screen === name)));
+    document.querySelectorAll('[data-screen-panel]').forEach(p => p.hidden = p.dataset.screenPanel !== name);
+  }
+  screenTabs.addEventListener('click', e => { const b = e.target.closest('[data-screen]'); if (b) showScreen(b.dataset.screen); });
+
+  /* ——— Lokalizacje: tabela + panel boczny ——— */
+  const locs = [
+    { k: 'A', name: 'Rejestracja ogólna', desc: 'Parter, wejście główne', tablet: 'Tablet hol główny', online: true, ops: ['Jan Kowalski', 'Anna Nowak'], active: true, paused: false },
+    { k: 'B', name: 'Gabinet kardiologiczny', desc: 'II piętro, skrzydło wschodnie', tablet: 'Tablet II piętro', online: true, ops: ['Anna Nowak'], active: true, paused: true },
+    { k: 'C', name: 'Punkt pobrań', desc: 'Parter, pokój 4', tablet: 'Tablet parter', online: false, ops: [], active: true, paused: false },
+    { k: 'D', name: 'Poradnia okulistyczna', desc: '', tablet: null, online: false, ops: [], active: false, paused: false },
+  ];
+  let filter = 'all';
+  const rows = document.getElementById('locRows');
+  const searchEl = document.getElementById('locSearch');
+  function renderLocs() {
+    const q = searchEl.value.trim().toLowerCase();
+    const list = locs.filter(l => (filter === 'all' || (filter === 'active' ? l.active : !l.active)) && l.name.toLowerCase().includes(q));
+    if (!list.length) { rows.innerHTML = `<tr><td colspan="4" style="height:auto;white-space:normal"><div class="empty"><h4>Brak pasujących lokalizacji</h4><p>Zmień wyszukiwaną frazę albo filtr statusu.</p></div></td></tr>`; return; }
+    rows.innerHTML = list.map(l => `<tr class="${l.active ? '' : 'is-off'}" data-k="${l.k}" tabindex="0">
+      <td><div class="cell-main"><span class="qletter${l.active ? '' : ' is-off'}">${l.k}</span><div><b${l.active ? '' : ' style="color:var(--ink-3)"'}>${esc(l.name)}</b><span>${l.desc ? esc(l.desc) : 'Brak opisu'}</span></div></div></td>
+      <td>${l.tablet ? `<span class="st ${l.online ? 'st-ok' : 'st-off'}">${esc(l.tablet)}</span>` : '<span class="muted-i">Brak kiosku</span>'}</td>
+      <td>${l.ops.length ? esc(l.ops.join(', ')) : '<span class="muted-i">Nikt</span>'}</td>
+      <td>${!l.active ? '<span class="st st-off">Dezaktywowana</span>' : l.paused ? '<span class="st st-paused">Zapisy wstrzymane</span>' : '<span class="st st-ok">Aktywna</span>'}</td></tr>`).join('');
+  }
+  document.getElementById('locFilter').addEventListener('click', e => {
+    const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f;
+    document.querySelectorAll('#locFilter button').forEach(x => x.setAttribute('aria-selected', String(x === b))); renderLocs();
+  });
+  searchEl.addEventListener('input', renderLocs);
+  const locApp = document.getElementById('locApp');
+  const drawer = document.getElementById('drawer');
+  let current = null;
+  function openDrawer(k) {
+    current = locs.find(l => l.k === k); if (!current) return;
+    document.getElementById('dLetter').textContent = current.k;
+    document.getElementById('dTitle').textContent = current.name;
+    document.getElementById('dName').value = current.name;
+    document.getElementById('dDesc').value = current.desc;
+    document.getElementById('dTablet').value = current.tablet || 'Brak kiosku';
+    document.getElementById('dNote').textContent = `Kod kolejki „${current.k}” jest nadawany automatycznie i się nie zmienia. Klienci zapisują się krótkim kodem z kiosku.`;
+    ['Jan Kowalski', 'Anna Nowak', 'Piotr Zieliński'].forEach((n, i) => document.getElementById('op' + (i + 1)).checked = current.ops.includes(n));
+    locApp.classList.add('drawer-open'); drawer.setAttribute('aria-hidden', 'false');
+    setTimeout(() => document.getElementById('dName').focus(), 200);
+  }
+  function closeDrawer() { locApp.classList.remove('drawer-open'); drawer.setAttribute('aria-hidden', 'true'); }
+  rows.addEventListener('click', e => { const tr = e.target.closest('tr[data-k]'); if (tr) openDrawer(tr.dataset.k); });
+  rows.addEventListener('keydown', e => { if (e.key === 'Enter') { const tr = e.target.closest('tr[data-k]'); if (tr) openDrawer(tr.dataset.k); } });
+  document.getElementById('dClose').addEventListener('click', closeDrawer);
+  document.getElementById('dCancel').addEventListener('click', closeDrawer);
+  document.getElementById('drawerScrim').addEventListener('click', closeDrawer);
+  drawer.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+  document.getElementById('dSave').addEventListener('click', () => {
+    if (!current) return;
+    const nm = document.getElementById('dName').value.trim();
+    if (nm) current.name = nm;
+    current.desc = document.getElementById('dDesc').value.trim();
+    const tb = document.getElementById('dTablet').value; current.tablet = tb === 'Brak kiosku' ? null : tb;
+    current.ops = ['Jan Kowalski', 'Anna Nowak', 'Piotr Zieliński'].filter((n, i) => document.getElementById('op' + (i + 1)).checked);
+    renderLocs(); closeDrawer(); toast(`Zapisano zmiany: ${current.name}.`);
+  });
+  renderLocs();
+
+  /* ——— Logowanie ——— */
+  document.getElementById('loginForm').addEventListener('submit', e => { e.preventDefault(); document.getElementById('loginErr').hidden = false; });
+
+  /* ——— Spis treści: aktywna sekcja ——— */
+  const tocLinks = [...document.querySelectorAll('.toc a')];
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(en => { if (en.isIntersecting) tocLinks.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  document.querySelectorAll('main > section').forEach(s => io.observe(s));
+
+  /* ——— Paleta poleceń ——— */
+  const cmdk = document.getElementById('cmdk');
+  const cmdkInput = document.getElementById('cmdkInput');
+  const cmdkList = document.getElementById('cmdkList');
+  const go = id => () => document.getElementById(id).scrollIntoView({ block: 'start' });
+  const items = [
+    { label: 'Kolejka na żywo', grp: 'Ekran', run: go('konsola') },
+    { label: 'Pulpit administratora', grp: 'Ekran', run: () => { showScreen('pulpit'); go('ekrany')(); } },
+    { label: 'Lokalizacje', grp: 'Ekran', run: () => { showScreen('lokalizacje'); go('ekrany')(); } },
+    { label: 'Logowanie', grp: 'Ekran', run: () => { showScreen('logowanie'); go('ekrany')(); } },
+    { label: 'Rejestracja ogólna', grp: 'Lokalizacja', run: () => { state.loc = 'A'; render(); go('konsola')(); } },
+    { label: 'Gabinet kardiologiczny', grp: 'Lokalizacja', run: () => { state.loc = 'B'; render(); go('konsola')(); } },
+    { label: 'Edytuj: Punkt pobrań', grp: 'Lokalizacja', run: () => { showScreen('lokalizacje'); go('ekrany')(); setTimeout(() => openDrawer('C'), 300); } },
+    { label: 'Wezwij następną osobę', grp: 'Akcja', run: () => { const L = state.locs[state.loc]; if (L.serving) resolve('ok'); else if (L.waiting.length) call(L.waiting[0].code); go('konsola')(); } },
+    { label: 'Wstrzymaj lub wznów zapisy', grp: 'Akcja', run: () => { toggleAccepting(); go('konsola')(); } },
+    { label: 'Motyw ciemny', grp: 'Ustawienia', run: () => setTheme('dark') },
+    { label: 'Motyw jasny', grp: 'Ustawienia', run: () => setTheme('light') },
+    { label: 'Kolor', grp: 'Design system', run: go('kolor') },
+    { label: 'Typografia', grp: 'Design system', run: go('typografia') },
+    { label: 'Komponenty', grp: 'Design system', run: go('komponenty') },
+    { label: 'Trendy i decyzje', grp: 'Design system', run: go('trendy') },
+    { label: 'Wdrożenie', grp: 'Design system', run: go('wdrozenie') },
+  ];
+  let sel = 0, shown = items, lastFocus = null;
+  function renderCmdk() {
+    const q = cmdkInput.value.trim().toLowerCase();
+    shown = items.filter(i => (i.label + ' ' + i.grp).toLowerCase().includes(q));
+    sel = Math.min(sel, Math.max(0, shown.length - 1));
+    cmdkList.innerHTML = shown.length ? shown.map((i, n) => `<li role="option" aria-selected="${n === sel}" data-n="${n}">${esc(i.label)}<span class="grp">${i.grp}</span></li>`).join('') : '<li class="none">Nic nie pasuje. Spróbuj nazwy ekranu albo lokalizacji.</li>';
+  }
+  function openCmdk() { lastFocus = document.activeElement; cmdk.hidden = false; cmdkInput.value = ''; sel = 0; renderCmdk(); cmdkInput.focus(); }
+  function closeCmdk() { cmdk.hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+  function runSel() { const it = shown[sel]; closeCmdk(); if (it) it.run(); }
+  document.getElementById('openCmdk').addEventListener('click', openCmdk);
+  cmdk.addEventListener('click', e => { if (e.target === cmdk) closeCmdk(); const li = e.target.closest('li[data-n]'); if (li) { sel = +li.dataset.n; runSel(); } });
+  cmdkInput.addEventListener('input', () => { sel = 0; renderCmdk(); });
+  cmdkInput.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); renderCmdk(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(sel - 1, 0); renderCmdk(); }
+    else if (e.key === 'Enter') { e.preventDefault(); runSel(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeCmdk(); }
+  });
+})();
+</script>
+</body></html>

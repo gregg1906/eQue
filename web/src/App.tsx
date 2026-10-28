@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import LoginForm from './components/LoginForm';
-import AdminHome from './components/AdminHome';
+import AdminHome, { type NavigateOptions } from './components/AdminHome';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLocations from './components/AdminLocations';
 import AdminUsers from './components/AdminUsers';
@@ -9,19 +9,35 @@ import Sidebar from './components/Sidebar';
 import UserSidebar from './components/UserSidebar';
 import UserHome from './components/UserHome';
 import UserQueue from './components/UserQueue';
+import Button from './components/ui/Button';
+import Icon from './components/ui/Icon';
+import Kbd from './components/ui/Kbd';
+import LiveIndicator from './components/ui/LiveIndicator';
+import CommandPalette, { type CommandItem } from './components/ui/CommandPalette';
+import EmptyState from './components/ui/EmptyState';
+import { ToastHost } from './components/ui/Toast';
 import { api, getToken, clearToken } from './lib/api';
 import { ws } from './lib/ws';
 import { DialogHost } from './lib/dialogs';
-import type { MeResponse, RefreshHandle } from './lib/apiTypes';
+import { runQueueCommand } from './lib/commands';
+import { sortByName } from './lib/sort';
+import { readThemePreference, saveThemePreference, systemPrefersDark, type ThemePreference } from './lib/theme';
+import { useWaitingTotal } from './lib/useWaitingTotal';
+import type { LocationResponse, MeResponse, RefreshHandle } from './lib/apiTypes';
 
 type Role = 'admin' | 'user' | null;
-type Theme = 'light' | 'dark';
 
 interface Session {
   id: string;
   role: Role;
   fullName: string;
   locationIds: number[];
+}
+
+/** Przejście z innego ekranu: otwórz panel edycji (admin) albo wybierz lokalizację w kolejce (operator). */
+interface Intent {
+  tab: string;
+  id: number;
 }
 
 function meToSession(me: MeResponse): Session {
@@ -33,135 +49,25 @@ function meToSession(me: MeResponse): Session {
   };
 }
 
+function homeTab(role: Role) {
+  return role === 'admin' ? 'strona_glowna' : 'kolejka';
+}
+
 const TAB_META: Record<string, { title: string; action: string | null }> = {
-  strona_glowna: { title: 'Pulpit',      action: null },
-  tablety:       { title: 'Tablety',     action: 'Dodaj urządzenie' },
-  lokalizacje:   { title: 'Lokalizacje', action: 'Dodaj lokalizację' },
-  uzytkownicy:   { title: 'Użytkownicy', action: 'Dodaj użytkownika' },
-  ustawienia:    { title: 'Ustawienia',  action: null },
+  strona_glowna: { title: 'Pulpit',          action: null },
+  lokalizacje:   { title: 'Lokalizacje',     action: 'Dodaj lokalizację' },
+  tablety:       { title: 'Tablety',         action: 'Dodaj tablet' },
+  uzytkownicy:   { title: 'Użytkownicy',     action: 'Dodaj użytkownika' },
+  ustawienia:    { title: 'Ustawienia',      action: null },
   kolejka:       { title: 'Kolejka na żywo', action: null },
 };
 
-const SEARCHABLE_TABS = new Set(['tablety', 'lokalizacje', 'uzytkownicy']);
+const ADMIN_TABS = ['strona_glowna', 'lokalizacje', 'tablety', 'uzytkownicy', 'ustawienia'];
+const USER_TABS = ['kolejka', 'strona_glowna', 'ustawienia'];
+const NO_LOCATIONS: number[] = [];
 
-
-function RefreshButton({ onClick, spinning }: { onClick: () => void; spinning: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={spinning}
-      title="Odśwież"
-      aria-label="Odśwież"
-      style={{
-        width: 40, height: 40, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'none', border: '1.5px solid var(--border-default)',
-        borderRadius: 'var(--radius-md)', color: 'var(--text-body)',
-        cursor: spinning ? 'default' : 'pointer', opacity: spinning ? 0.6 : 1,
-        transition: 'background var(--dur-fast), opacity var(--dur-fast)',
-      }}
-      onMouseEnter={e => { if (!spinning) e.currentTarget.style.background = 'var(--surface-sunken)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-    >
-      <svg
-        width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        style={{ animation: spinning ? 'eque-spin 0.7s linear infinite' : 'none' }}
-      >
-        <path d="M23 4v6h-6" /><path d="M1 20v-6h6" />
-        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-      </svg>
-    </button>
-  );
-}
-
-function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const close = () => { if (!value) setOpen(false); };
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', height: 40,
-      width: open ? 240 : 40,
-      border: `1.5px solid ${open ? 'var(--border-default)' : 'transparent'}`,
-      borderRadius: 'var(--radius-md)',
-      background: open ? 'var(--surface-card)' : 'transparent',
-      overflow: 'hidden', flexShrink: 0,
-      transition: 'width 240ms var(--ease-out), border-color 240ms var(--ease-out), background 240ms var(--ease-out)',
-    }}>
-      <button
-        onClick={() => { setOpen(true); requestAnimationFrame(() => inputRef.current?.focus()); }}
-        title="Szukaj"
-        aria-label="Szukaj"
-        style={{
-          width: 40, height: 40, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-body)', padding: 0,
-        }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface-sunken)'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-      </button>
-      <input
-        ref={inputRef}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onBlur={close}
-        onKeyDown={e => {
-          if (e.key === 'Escape') { onChange(''); inputRef.current?.blur(); }
-        }}
-        placeholder="Szukaj po nazwie…"
-        style={{
-          width: open ? 190 : 0, opacity: open ? 1 : 0,
-          border: 'none', outline: 'none', background: 'transparent',
-          fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-strong)',
-          padding: 0, marginRight: open ? 12 : 0,
-          transition: 'width 240ms var(--ease-out), opacity 180ms var(--ease-out)',
-        }}
-      />
-    </div>
-  );
-}
-
-function AddIconButton({ onClick, label }: { onClick: () => void; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      style={{
-        width: 40, height: 40, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--brand)', color: '#fff', border: 'none',
-        borderRadius: 'var(--radius-md)', cursor: 'pointer',
-        transition: 'background var(--dur-fast)',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'var(--brand-hover)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'var(--brand)'; }}
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-      </svg>
-    </button>
-  );
-}
-
-function RefreshOverlay() {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '120px 0' }}>
-      <div style={{
-        width: 38, height: 38, borderRadius: '50%',
-        border: '3.5px solid var(--border-subtle)', borderTopColor: 'var(--brand)',
-        animation: 'eque-spin 0.7s linear infinite',
-      }} />
-      <p style={{ fontFamily: 'var(--font-ui)', fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>Odświeżanie…</p>
-    </div>
-  );
-}
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -169,18 +75,28 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<string>('strona_glowna');
   const [addOpen, setAddOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteLocations, setPaletteLocations] = useState<LocationResponse[]>([]);
+  const [navOpen, setNavOpen] = useState(false);
   const contentRef = useRef<RefreshHandle | null>(null);
 
-  const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem('eque_theme') as Theme) || 'light';
-  });
+  const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
+  const [systemDark, setSystemDark] = useState(systemPrefersDark);
+  const resolvedTheme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return;
+    const onChange = () => setSystemDark(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   useLayoutEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('eque_theme', theme);
-  }, [theme]);
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+    saveThemePreference(theme);
+  }, [theme, resolvedTheme]);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -190,7 +106,11 @@ export default function App() {
         return;
       }
       api.get<MeResponse>('/auth/me')
-        .then(me => setSession(meToSession(me)))
+        .then(me => {
+          const s = meToSession(me);
+          setSession(s);
+          setActiveTab(homeTab(s.role));
+        })
         .catch(() => clearToken())
         .finally(() => setCheckingSession(false));
     }, 0);
@@ -205,124 +125,193 @@ export default function App() {
     return () => { offReconnect(); ws.disconnect(); };
   }, [session]);
 
+  // Ctrl/Cmd+K — paleta poleceń na każdym ekranie
+  useEffect(() => {
+    if (!session) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        if (document.querySelector('[role="alertdialog"]')) return;
+        e.preventDefault();
+        setPaletteOpen(open => !open);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [session]);
+
+  useEffect(() => {
+    if (!paletteOpen || !session) return;
+    let cancelled = false;
+    api.get<LocationResponse[]>('/admin/locations')
+      .then(locs => { if (!cancelled) setPaletteLocations(locs); })
+      .catch(() => { /* paleta działa bez listy lokalizacji */ });
+    return () => { cancelled = true; };
+  }, [paletteOpen, session]);
+
+  const waitingCount = useWaitingTotal(session?.locationIds ?? NO_LOCATIONS, session?.role === 'user');
+
+  const clearIntent = useCallback(() => setIntent(null), []);
+  const closeAdd = useCallback(() => setAddOpen(false), []);
+  const openAdd = useCallback(() => setAddOpen(true), []);
+
+  const switchTab = useCallback((tab: string) => {
+    setActiveTab(tab);
+    setAddOpen(false);
+    setIntent(null);
+    setNavOpen(false);
+  }, []);
+
+  const navigate = useCallback((tab: string, opts?: NavigateOptions) => {
+    setActiveTab(tab);
+    setNavOpen(false);
+    setAddOpen(!!opts?.add);
+    setIntent(opts?.editId !== undefined ? { tab, id: opts.editId } : null);
+  }, []);
+
+  const openQueue = (locationId?: number) => {
+    if (activeTab === 'kolejka') {
+      if (locationId !== undefined) runQueueCommand({ type: 'select', locationId });
+      return;
+    }
+    setActiveTab('kolejka');
+    setNavOpen(false);
+    setIntent(locationId !== undefined ? { tab: 'kolejka', id: locationId } : null);
+  };
+
   const handleLoginSuccess = (me: MeResponse) => {
-    setSession(meToSession(me));
-    setActiveTab('strona_glowna');
+    const s = meToSession(me);
+    setSession(s);
+    setActiveTab(homeTab(s.role));
   };
 
   const handleLogout = () => {
     setSession(null);
+    setPaletteOpen(false);
+    setNavOpen(false);
+    setAddOpen(false);
+    setIntent(null);
     clearToken();
   };
 
-  const switchTab = (tab: string) => {
-    setActiveTab(tab);
-    setAddOpen(false);
-    setSearchQuery('');
-  };
-
-  const handleRefresh = () => {
-    if (refreshing || !contentRef.current) return;
-    const done = contentRef.current.refetch();
-    setRefreshing(true);
-    done.finally(() => setRefreshing(false));
-  };
+  const hosts = <><DialogHost /><ToastHost /></>;
 
   if (checkingSession) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-page)' }}>
-        <div style={{
-          width: 38, height: 38, borderRadius: '50%',
-          border: '3.5px solid var(--border-subtle)', borderTopColor: 'var(--brand)',
-          animation: 'eque-spin 0.7s linear infinite',
-        }} />
-      </div>
-    );
+    return <div className="app-loading" role="status" aria-label="Wczytywanie"><div className="spinner" /></div>;
   }
 
   if (!session) {
-    return <LoginForm onLoginSuccess={handleLoginSuccess} />;
+    return <><LoginForm onLoginSuccess={handleLoginSuccess} />{hosts}</>;
   }
 
   const { id: currentUserId, role, fullName: userName, locationIds } = session;
-
   const meta = TAB_META[activeTab] ?? { title: activeTab, action: null };
-  const showSearch = role === 'admin' && SEARCHABLE_TABS.has(activeTab);
-  const showRefresh = activeTab !== 'ustawienia';
+  const intentId = (tab: string) => (intent?.tab === tab ? intent.id : null);
 
-  const placeholder = (text: string) => (
-    <div style={{ background: 'var(--surface-card)', borderRadius: 'var(--radius-lg)', padding: 32, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-subtle)' }}>
-      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-ui)', fontSize: 16, margin: 0 }}>{text}</p>
-    </div>
-  );
+  const paletteItems: CommandItem[] = [
+    ...(role === 'admin' ? ADMIN_TABS : USER_TABS).map(tab => ({
+      id: `tab-${tab}`, label: TAB_META[tab].title, group: 'Ekran', run: () => switchTab(tab),
+    })),
+    ...(role === 'user' && activeTab === 'kolejka' ? [
+      { id: 'q-primary', label: 'Obsłużono, wezwij następną osobę', group: 'Akcja', run: () => runQueueCommand({ type: 'primary' }) },
+      { id: 'q-noshow', label: 'Nie zgłosił się', group: 'Akcja', run: () => runQueueCommand({ type: 'noshow' }) },
+      { id: 'q-pause', label: 'Wstrzymaj lub wznów zapisy', group: 'Akcja', run: () => runQueueCommand({ type: 'togglePause' }) },
+    ] : []),
+    ...(role === 'admin' ? [
+      { id: 'add-location', label: 'Dodaj lokalizację', group: 'Akcja', run: () => navigate('lokalizacje', { add: true }) },
+      { id: 'add-tablet', label: 'Dodaj tablet', group: 'Akcja', run: () => navigate('tablety', { add: true }) },
+      { id: 'add-user', label: 'Dodaj użytkownika', group: 'Akcja', run: () => navigate('uzytkownicy', { add: true }) },
+    ] : []),
+    ...sortByName(
+      role === 'admin' ? paletteLocations : paletteLocations.filter(l => l.is_active && locationIds.includes(l.id)),
+      l => l.name,
+    ).map(l => role === 'admin'
+      ? { id: `loc-${l.id}`, label: `Edytuj: ${l.name}`, group: 'Lokalizacja', run: () => navigate('lokalizacje', { editId: l.id }) }
+      : { id: `loc-${l.id}`, label: `${l.queue_code} · ${l.name}`, group: 'Lokalizacja', run: () => openQueue(l.id) }),
+    { id: 'theme-light', label: 'Motyw jasny', group: 'Ustawienia', run: () => setTheme('light') },
+    { id: 'theme-dark', label: 'Motyw ciemny', group: 'Ustawienia', run: () => setTheme('dark') },
+    { id: 'theme-system', label: 'Motyw systemowy', group: 'Ustawienia', run: () => setTheme('system') },
+    { id: 'logout', label: 'Wyloguj', group: 'Konto', run: handleLogout },
+  ];
+
+  let content: React.ReactNode;
+  if (role === 'admin') {
+    content =
+      activeTab === 'strona_glowna' ? <AdminHome ref={contentRef} onNavigate={navigate} />
+      : activeTab === 'tablety'     ? <AdminDashboard ref={contentRef} addOpen={addOpen} onAddOpen={openAdd} onAddClose={closeAdd} editId={intentId('tablety')} onEditHandled={clearIntent} />
+      : activeTab === 'lokalizacje' ? <AdminLocations ref={contentRef} addOpen={addOpen} onAddOpen={openAdd} onAddClose={closeAdd} editId={intentId('lokalizacje')} onEditHandled={clearIntent} />
+      : activeTab === 'uzytkownicy' ? <AdminUsers ref={contentRef} addOpen={addOpen} onAddOpen={openAdd} onAddClose={closeAdd} currentUserId={currentUserId} />
+      : activeTab === 'ustawienia'  ? <AdminSettings theme={theme} onThemeChange={setTheme} />
+      : null;
+  } else {
+    content =
+      activeTab === 'strona_glowna' ? <UserHome ref={contentRef} locationIds={locationIds} onOpenQueue={openQueue} />
+      : activeTab === 'kolejka'     ? <UserQueue ref={contentRef} locationIds={locationIds} initialLocationId={intentId('kolejka')} />
+      : activeTab === 'ustawienia'  ? <AdminSettings theme={theme} onThemeChange={setTheme} />
+      : null;
+  }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--surface-page)' }}>
-      {role === 'admin' && (
+    <div className="app-shell">
+      {role === 'admin' ? (
         <Sidebar
           activeTab={activeTab}
           setActiveTab={switchTab}
           userName={userName}
-          userRole="admin"
           onLogout={handleLogout}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
         />
-      )}
-      {role === 'user' && (
+      ) : (
         <UserSidebar
           activeTab={activeTab}
           setActiveTab={switchTab}
           userName={userName}
           onLogout={handleLogout}
+          waitingCount={waitingCount}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
         />
       )}
 
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        {}
-        <div style={{
-          position: 'sticky', top: 0, zIndex: 20,
-          background: 'var(--surface-card)',
-          borderBottom: '1px solid var(--border-subtle)',
-          padding: '22px 48px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexShrink: 0,
-        }}>
-          <h1 style={{
-            fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 30,
-            color: 'var(--text-strong)', margin: 0, letterSpacing: '-0.02em',
-          }}>
-            {meta.title}
-          </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {showSearch && <SearchBox key={activeTab} value={searchQuery} onChange={setSearchQuery} />}
-            {showRefresh && <RefreshButton onClick={handleRefresh} spinning={refreshing} />}
-            {meta.action && (
-              <AddIconButton onClick={() => setAddOpen(true)} label={meta.action} />
-            )}
+      <main className="app-main">
+        <header className="app-head">
+          <button
+            type="button"
+            className="icon-btn nav-toggle"
+            aria-label="Otwórz menu"
+            aria-expanded={navOpen}
+            aria-controls="app-sidenav"
+            onClick={() => setNavOpen(true)}
+          >
+            <Icon name="menu" />
+          </button>
+          <h1 className="app-title">{meta.title}</h1>
+          <div className="app-head-actions">
+            {activeTab !== 'ustawienia' && <LiveIndicator onRefresh={() => contentRef.current?.refetch()} />}
+            {meta.action && <Button variant="primary" icon="plus" onClick={openAdd}>{meta.action}</Button>}
+            <button
+              type="button"
+              className="cmdk-btn"
+              onClick={() => setPaletteOpen(true)}
+              aria-label="Szukaj i przejdź"
+              aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'}
+            >
+              <Icon name="search" />
+              <span className="cmdk-btn-label">Szukaj</span>
+              <Kbd keys={[MOD_KEY, 'K']} />
+            </button>
           </div>
-        </div>
+        </header>
 
-        {}
-        <div style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
-          <div style={{ maxWidth: 1240, margin: '0 auto', width: '100%' }}>
-            {refreshing ? <RefreshOverlay /> : (
-              role === 'admin' ? (
-                activeTab === 'strona_glowna' ? <AdminHome ref={contentRef} userName={userName} />
-                : activeTab === 'tablety'     ? <AdminDashboard ref={contentRef} addOpen={addOpen} onAddClose={() => setAddOpen(false)} searchQuery={searchQuery} />
-                : activeTab === 'lokalizacje' ? <AdminLocations ref={contentRef} addOpen={addOpen} onAddClose={() => setAddOpen(false)} searchQuery={searchQuery} />
-                : activeTab === 'uzytkownicy' ? <AdminUsers ref={contentRef} addOpen={addOpen} onAddClose={() => setAddOpen(false)} searchQuery={searchQuery} currentUserId={currentUserId} />
-                : activeTab === 'ustawienia'  ? <AdminSettings theme={theme} onThemeChange={setTheme} />
-                : placeholder('Pusta zakładka')
-              ) : role === 'user' ? (
-                activeTab === 'strona_glowna' ? <UserHome ref={contentRef} userName={userName} locationIds={locationIds} />
-                : activeTab === 'kolejka'     ? <UserQueue ref={contentRef} userName={userName} locationIds={locationIds} />
-                : activeTab === 'ustawienia'  ? <AdminSettings theme={theme} onThemeChange={setTheme} />
-                : placeholder('Pusta zakładka')
-              ) : null
-            )}
+        <div className="app-body">
+          <div className="app-body-in">
+            {content ?? <div className="card"><EmptyState title="Pusta zakładka" text="Wybierz ekran z menu po lewej." /></div>}
           </div>
         </div>
       </main>
-      <DialogHost />
+
+      {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+      {hosts}
     </div>
   );
 }

@@ -1,5 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
+import Icon from './Icon';
+import { useFieldControl } from './fieldContext';
 
 export interface SelectOption {
   value: string;
@@ -13,29 +15,16 @@ interface SelectProps {
   placeholder?: string;
   disabled?: boolean;
   style?: React.CSSProperties;
+  /** Dostępna nazwa, gdy Select nie jest w <Field>. */
+  ariaLabel?: string;
 }
 
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"
-      style={{ flexShrink: 0, transition: 'transform 220ms var(--ease-out)', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
+function measure(el: HTMLElement | null) {
+  const r = el?.getBoundingClientRect();
+  return r ? { top: r.bottom + 6, left: r.left, width: r.width } : null;
 }
 
-function CheckIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-export default function Select({ value, onChange, options, placeholder = 'Wybierz…', disabled = false, style }: SelectProps) {
+export default function Select({ value, onChange, options, placeholder = 'Wybierz…', disabled = false, style, ariaLabel }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [openCount, setOpenCount] = useState(0);
   const [highlight, setHighlight] = useState(0);
@@ -44,26 +33,24 @@ export default function Select({ value, onChange, options, placeholder = 'Wybier
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const field = useFieldControl();
+  const listId = useId();
 
   const selected = options.find(o => o.value === value);
 
-  const measure = () => {
-    const r = triggerRef.current?.getBoundingClientRect();
-    if (r) setRect({ top: r.bottom + 6, left: r.left, width: r.width });
+  const openPanel = () => {
+    if (disabled) return;
+    setRect(measure(triggerRef.current));
+    setOpenCount(c => c + 1);
+    const idx = options.findIndex(opt => opt.value === value);
+    setHighlight(idx >= 0 ? idx : 0);
+    setOpen(true);
   };
 
-  const toggleOpen = () => {
-    if (disabled) return;
-    setOpen(o => {
-      const next = !o;
-      if (next) {
-        measure();
-        setOpenCount(c => c + 1);
-        const idx = options.findIndex(opt => opt.value === value);
-        setHighlight(idx >= 0 ? idx : 0);
-      }
-      return next;
-    });
+  const choose = (opt: SelectOption | undefined) => {
+    if (opt) onChange(opt.value);
+    setOpen(false);
+    triggerRef.current?.focus();
   };
 
   useEffect(() => {
@@ -74,95 +61,83 @@ export default function Select({ value, onChange, options, placeholder = 'Wybier
       if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return;
       setOpen(false);
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setOpen(false); triggerRef.current?.focus(); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, options.length - 1)); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
-      else if (e.key === 'Enter') {
-        e.preventDefault();
-        const opt = options[highlight];
-        if (opt) { onChange(opt.value); setOpen(false); }
-      }
-    };
-    const onReposition = () => measure();
+    const onReposition = () => setRect(measure(triggerRef.current));
 
     document.addEventListener('mousedown', onDocMouseDown);
-    document.addEventListener('keydown', onKeyDown);
     window.addEventListener('scroll', onReposition, true);
     window.addEventListener('resize', onReposition);
     return () => {
       document.removeEventListener('mousedown', onDocMouseDown);
-      document.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('scroll', onReposition, true);
       window.removeEventListener('resize', onReposition);
     };
-  }, [open, options, highlight, onChange]);
+  }, [open]);
+
+  // Klawiatura obsługiwana na przycisku (fokus zostaje na nim): Esc zamyka tylko listę, nie panel boczny pod nią.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); openPanel(); }
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, options.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); choose(options[highlight]); }
+    else if (e.key === 'Tab') { setOpen(false); }
+  };
 
   return (
     <div ref={rootRef} style={{ position: 'relative', width: '100%', ...style }}>
       <button
         ref={triggerRef}
         type="button"
-        onClick={toggleOpen}
+        id={field?.id}
+        className="input select-trigger"
+        onClick={() => (open ? setOpen(false) : openPanel())}
+        onKeyDown={onKeyDown}
         disabled={disabled}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-          border: `1.5px solid ${open ? 'var(--focus-ring)' : 'var(--border-default)'}`,
-          borderRadius: 'var(--radius-md)', padding: '11px 14px',
-          fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 500,
-          color: selected ? 'var(--text-strong)' : 'var(--text-faint)',
-          background: disabled ? 'var(--surface-sunken)' : 'var(--surface-card)',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.65 : 1,
-          transition: 'border-color 160ms var(--ease-out)',
-          textAlign: 'left',
-        }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open ? `${listId}-${highlight}` : undefined}
+        aria-describedby={field?.describedBy}
+        aria-label={ariaLabel}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className={selected ? 'select-value' : 'select-value is-placeholder'}>
           {selected ? selected.label : placeholder}
         </span>
-        <span style={{ display: 'flex', color: 'var(--text-faint)' }}><ChevronIcon open={open} /></span>
+        <Icon name="chevronDown" />
       </button>
 
       {rect && createPortal(
         <div
           ref={panelRef}
+          className="select-panel"
           style={{
-            position: 'fixed', top: rect.top, left: rect.left, width: rect.width, zIndex: 1000,
-            transformOrigin: 'top center',
+            top: rect.top, left: rect.left, width: rect.width,
             transform: open ? 'scaleY(1) translateY(0)' : 'scaleY(0.92) translateY(-6px)',
             opacity: open ? 1 : 0,
             pointerEvents: open ? 'auto' : 'none',
-            transition: 'transform 190ms var(--ease-out), opacity 150ms var(--ease-out)',
-            background: 'var(--surface-card)', border: '1.5px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)', boxShadow: '0 14px 32px rgba(21,27,31,0.20)',
-            maxHeight: 264, overflowY: 'auto', padding: 6, boxSizing: 'border-box',
+            visibility: open ? 'visible' : 'hidden',
           }}
         >
-          <ul key={openCount} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {options.length === 0 && (
-              <li style={{ padding: '10px 12px', fontFamily: 'var(--font-ui)', fontSize: 13.5, color: 'var(--text-faint)' }}>Brak opcji</li>
-            )}
+          <ul key={openCount} id={listId} role="listbox">
+            {options.length === 0 && <li className="select-empty" role="presentation">Brak opcji</li>}
             {options.map((opt, i) => {
               const isSelected = opt.value === value;
-              const isHighlighted = i === highlight;
               return (
                 <li
                   key={opt.value}
-                  onMouseEnter={() => setHighlight(i)}
-                  onClick={() => { onChange(opt.value); setOpen(false); triggerRef.current?.focus(); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                    padding: '9px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                    fontFamily: 'var(--font-ui)', fontSize: 14.5, fontWeight: isSelected ? 700 : 500,
-                    color: isSelected ? 'var(--text-brand)' : 'var(--text-body)',
-                    background: isHighlighted ? 'var(--surface-sunken)' : 'transparent',
-                    animation: open ? `eque-option-in 200ms var(--ease-out) ${Math.min(i, 8) * 16}ms both` : 'none',
-                    transition: 'background 120ms var(--ease-out)',
-                  }}
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  className={i === highlight ? 'select-option is-highlighted' : 'select-option'}
+                  onMouseMove={() => { if (i !== highlight) setHighlight(i); }}
+                  onClick={() => choose(opt)}
+                  style={{ animation: open ? `eque-option-in 200ms var(--ease-out) ${Math.min(i, 8) * 16}ms both` : 'none' }}
                 >
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.label}</span>
-                  {isSelected && <span style={{ display: 'flex', color: 'var(--brand)', flexShrink: 0 }}><CheckIcon /></span>}
+                  {isSelected && <Icon name="check" />}
                 </li>
               );
             })}

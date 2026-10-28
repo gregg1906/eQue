@@ -1,0 +1,257 @@
+/*
+  eQue — design system panelu webowego, opcja B „Odświeżony teal” (2026-10)
+  Paleta, kroje i promienie 1:1 z aplikacją mobilną (mobile/lib/theme/eque_theme.dart).
+  Zachowuje WSZYSTKIE nazwy zmiennych z obecnego web/src/index.css — istniejący kod działa bez zmian.
+
+  Użycie w web/src/index.css (zastępuje bloki :root i :root[data-theme="dark"]):
+    @import "tailwindcss";
+    @import "./tokens.css";
+  Czcionki bez zmian: Space Grotesk (nagłówki, kody) + Manrope (interfejs).
+
+  Najważniejsza zmiana: biały tekst na --brand (#0FB5AB) ma kontrast 2,5:1.
+  Przyciski i tekst w kolorze marki → --brand-strong (#0C7B74, 5:1).
+*/
+
+:root {
+  /* ——— Skale (jak w mobile) ——— */
+  --teal-50:  #ECFDFA;
+  --teal-100: #CFF8F1;
+  --teal-200: #9CEEE2;
+  --teal-400: #25C7B7;
+  --teal-500: #0FB5AB;
+  --teal-600: #0E9B92;
+  --teal-700: #0C7B74;
+  --teal-800: #0A6863;
+
+  --slate-0:   #FFFFFF;
+  --slate-50:  #F6F8F9;
+  --slate-100: #EDF1F3;
+  --slate-200: #DDE4E8;
+  --slate-300: #C4CED4;
+  --slate-400: #94A3AC;
+  --slate-500: #677782;
+  --slate-600: #4C5961;
+  --slate-700: #364148;
+  --slate-800: #232B30;
+  --slate-900: #151B1F;
+
+  --amber-50:  #FFF8EB;
+  --amber-100: #FDEDC8;
+  --amber-500: #F2A60C;
+  --amber-600: #D98906;
+  --amber-700: #A9650A;
+
+  --green-50:  #ECFDF3;
+  --green-100: #D1FADF;
+  --green-500: #16A34A;
+  --green-600: #128A3E;
+  --green-700: #0F6E33;
+
+  --blue-50:  #EFF6FF;
+  --blue-100: #DBEAFE;
+  --blue-500: #3B82F6;
+  --blue-600: #2563EB;
+
+  --red-50:  #FEF2F2;
+  --red-100: #FEE2E2;
+  --red-500: #E5484D;
+  --red-600: #CE363B;
+  --red-700: #A52A2E;
+
+  /* ——— Role (istniejące nazwy) ——— */
+  --brand:          var(--teal-500);   /* logo, kropki, paski postępu, włączniki */
+  --brand-hover:    var(--teal-600);
+  --brand-active:   var(--teal-700);
+  --brand-subtle:   var(--teal-50);    /* aktywne menu, litera kolejki */
+  --brand-subtle-2: var(--teal-100);
+  --brand-border:   var(--teal-200);
+  --on-brand:       #FFFFFF;
+
+  /* ——— Role nowe ——— */
+  --brand-strong:       var(--teal-700); /* przyciski główne, panel „Teraz obsługiwany” */
+  --brand-strong-hover: var(--teal-800);
+  --serving-panel:      var(--teal-700); /* stały w obu motywach */
+
+  --surface-page:   var(--slate-50);
+  --surface-card:   #FFFFFF;
+  --surface-sunken: var(--slate-100);
+
+  --text-strong: var(--slate-900);
+  --text-body:   var(--slate-700);
+  --text-muted:  var(--slate-500);
+  --text-faint:  var(--slate-400);    /* tylko dekoracje i placeholdery — za słaby na treść */
+  --text-brand:  var(--teal-700);
+
+  --border-subtle:  var(--slate-200);
+  --border-default: var(--slate-300);
+  --focus-ring:     var(--teal-600);  /* było teal-400: za mały kontrast obrysu na bieli */
+
+  /* Statusy kolejki — 1:1 z EQueColors.queue* */
+  --queue-waiting: var(--amber-700);  --queue-waiting-dot: var(--amber-500);
+  --queue-waiting-bg: var(--amber-50); --queue-waiting-border: var(--amber-100);
+  --queue-serving: var(--teal-700);   --queue-serving-dot: var(--teal-500);
+  --queue-serving-bg: var(--teal-50); --queue-serving-border: var(--teal-200);
+  --queue-served: var(--green-600);
+  --queue-served-bg: var(--green-50); --queue-served-border: var(--green-100);
+  --queue-skipped: var(--red-600);
+  --queue-skipped-bg: var(--red-50);  --queue-skipped-border: var(--red-100);
+  --queue-paused: var(--slate-600);
+  --queue-paused-bg: var(--slate-100); --queue-paused-border: var(--slate-200);
+
+  --toast-bg: var(--slate-900);
+  --toast-fg: #FFFFFF;
+  --scrim: rgba(12, 16, 19, .45);
+
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-ui:      "Manrope", "Segoe UI", system-ui, sans-serif;
+
+  /* promienie jak EQueRadii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;   /* kontrolki */
+  --radius-lg: 14px;   /* karty, panele */
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(21,27,31,0.06), 0 1px 3px rgba(21,27,31,0.08);
+  --shadow-md: 0 2px 4px rgba(21,27,31,0.05), 0 6px 16px rgba(21,27,31,0.08);
+  --shadow-lg: 0 2px 6px rgba(21,27,31,0.06), 0 8px 24px rgba(21,27,31,0.10);
+  --shadow-xl: 0 6px 16px rgba(21,27,31,0.08), 0 18px 48px rgba(21,27,31,0.16);
+  --shadow-serving: 0 2px 4px rgba(12,123,116,.18), 0 16px 36px -12px rgba(12,123,116,.45);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --slate-0:   #0B0F12;
+  --slate-50:  #0F1417;
+  --slate-100: #1B232A;
+  --slate-200: #2A343C;
+  --slate-300: #3C4750;
+  --slate-400: #62707A;
+  --slate-500: #8C99A2;
+  --slate-600: #A9B4BB;
+  --slate-700: #CBD3D8;
+  --slate-800: #E2E7E9;
+  --slate-900: #F4F6F7;
+
+  --teal-50:  rgba(37, 199, 183, 0.12);
+  --teal-100: rgba(37, 199, 183, 0.20);
+  --teal-200: rgba(37, 199, 183, 0.34);
+  --teal-600: #3FDCC9;
+  --teal-700: #5EE6D6;
+
+  --amber-50:  rgba(242, 166, 12, 0.12);
+  --amber-100: rgba(242, 166, 12, 0.22);
+  --amber-600: #F5B83D;
+  --amber-700: #FBCB6E;
+
+  --green-50:  rgba(22, 163, 74, 0.14);
+  --green-100: rgba(22, 163, 74, 0.24);
+  --green-600: #34D399;
+  --green-700: #6EE7B7;
+
+  --red-50:  rgba(229, 72, 77, 0.14);
+  --red-100: rgba(229, 72, 77, 0.24);
+  --red-600: #F47074;
+  --red-700: #FF9DA0;
+
+  --blue-100: rgba(59, 130, 246, 0.22);
+  --blue-600: #7AAFFF;
+
+  --surface-card: #171F24;
+
+  /* w ciemnym przycisk główny jest jasnym tealem z ciemnym tekstem */
+  --brand-strong: #25C7B7;
+  --brand-strong-hover: #3FDCC9;
+  --on-brand: #0B0F12;
+  --serving-panel: #0C7B74;
+  --focus-ring: #5EE6D6;
+
+  --toast-bg: #E2E7E9;
+  --toast-fg: #0F1417;
+  --scrim: rgba(0, 0, 0, .6);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 6px rgba(0,0,0,0.35), 0 10px 28px rgba(0,0,0,0.45);
+  --shadow-xl: 0 2px 6px rgba(0,0,0,0.35), 0 18px 48px rgba(0,0,0,0.5);
+
+  color-scheme: dark;
+}
+
+/* ——— Klasy Tailwind 4 (bg-brand-strong, text-text-muted, rounded-control, font-display…) ——— */
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-strong-hover: var(--brand-strong-hover);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-border: var(--brand-border);
+  --color-on-brand: var(--on-brand);
+  --color-serving: var(--serving-panel);
+  --color-page: var(--surface-page);
+  --color-card: var(--surface-card);
+  --color-sunken: var(--surface-sunken);
+  --color-strong: var(--text-strong);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-brand-text: var(--text-brand);
+  --color-line: var(--border-subtle);
+  --color-line-strong: var(--border-default);
+  --color-waiting: var(--queue-waiting);
+  --color-waiting-bg: var(--queue-waiting-bg);
+  --color-served: var(--queue-served);
+  --color-served-bg: var(--queue-served-bg);
+  --color-skipped: var(--queue-skipped);
+  --color-skipped-bg: var(--queue-skipped-bg);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-ui);
+
+  /* jedna skala zamiast 12,5 / 13,5 / 14,5 px wpisywanych ręcznie */
+  --text-xs: 0.75rem;      /* 12 */
+  --text-sm: 0.8125rem;    /* 13 — etykiety, podpisy */
+  --text-base: 0.9375rem;  /* 15 — treść, interfejs */
+  --text-md: 1.0625rem;    /* 17 — nagłówki kart */
+  --text-lg: 1.25rem;      /* 20 — kody na listach */
+  --text-xl: 1.5625rem;    /* 25 — tytuł strony */
+  --text-2xl: 2rem;        /* 32 */
+  --text-code: clamp(3.5rem, 8vw, 6rem); /* kod na panelu obsługi (96 px jak hero w mobile) */
+
+  --radius-control: var(--radius-md);
+  --radius-card: var(--radius-lg);
+
+  --shadow-card: var(--shadow-sm);
+  --shadow-pop: var(--shadow-xl);
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  background: var(--surface-page);
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text-strong); letter-spacing: -0.02em; text-wrap: balance; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+@utility ticket-code {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+@keyframes eque-spin { to { transform: rotate(360deg); } }
+@keyframes eque-option-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes eque-pop { 0% { transform: scale(1); } 40% { transform: scale(0.96); } 100% { transform: scale(1); } }
+@keyframes eque-flip { from { transform: translateY(18%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes eque-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 55%, transparent); } 80%, 100% { box-shadow: 0 0 0 6px transparent; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

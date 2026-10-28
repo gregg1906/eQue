@@ -5,6 +5,7 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 
 export type WsMessage = { type: string; topic?: string; [key: string]: unknown };
+export type WsStatus = 'connected' | 'reconnecting';
 type Handler = (message: WsMessage) => void;
 
 class WsClient {
@@ -12,6 +13,8 @@ class WsClient {
   private topics: string[] = [];
   private handlers = new Map<string, Set<Handler>>();
   private reconnectHandlers = new Set<() => void>();
+  private statusHandlers = new Set<(status: WsStatus) => void>();
+  private status: WsStatus = 'reconnecting';
   private hasConnectedOnce = false;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -38,6 +41,7 @@ class WsClient {
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.socket?.close();
     this.socket = null;
+    this.setStatus('reconnecting');
   }
 
   on(type: string, handler: Handler): () => void {
@@ -49,6 +53,21 @@ class WsClient {
   onReconnect(handler: () => void): () => void {
     this.reconnectHandlers.add(handler);
     return () => this.reconnectHandlers.delete(handler);
+  }
+
+  onStatus(handler: (status: WsStatus) => void): () => void {
+    this.statusHandlers.add(handler);
+    return () => this.statusHandlers.delete(handler);
+  }
+
+  getStatus(): WsStatus {
+    return this.status;
+  }
+
+  private setStatus(status: WsStatus) {
+    if (this.status === status) return;
+    this.status = status;
+    this.statusHandlers.forEach(h => h(status));
   }
 
   private open() {
@@ -64,6 +83,7 @@ class WsClient {
       const isReconnect = this.hasConnectedOnce;
       this.hasConnectedOnce = true;
       this.reconnectDelay = RECONNECT_BASE_MS;
+      this.setStatus('connected');
       socket.send(JSON.stringify({ type: 'subscribe', topics: this.topics }));
       this.pingTimer = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }));
@@ -85,6 +105,7 @@ class WsClient {
     socket.onclose = () => {
       if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
       if (this.closedByClient) return;
+      this.setStatus('reconnecting');
       this.reconnectTimer = setTimeout(() => this.open(), this.reconnectDelay);
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS);
     };

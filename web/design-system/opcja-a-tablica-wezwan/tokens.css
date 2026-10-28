@@ -1,0 +1,154 @@
+/*
+  eQue — design system panelu webowego „Tablica wezwań” (v1.0, 2026-10)
+  Użycie w web/src/index.css:
+    @import "tailwindcss";
+    @import "./tokens.css";
+  Czcionka (web/index.html):
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
+
+  Zasada koloru: --signal (żółty) TYLKO dla wezwania. Zielony/czerwony tylko dla wyniku/stanu.
+  Motyw: <html data-theme="dark"> (obecny przełącznik w Ustawieniach zostaje bez zmian).
+*/
+
+/* ——— Wartości surowe: motyw jasny ——— */
+:root {
+  --paper:        #EEF0F4;
+  --surface:      #FFFFFF;
+  --surface-2:    #F5F6F9;
+  --nav-active:   #E2E6EF;
+  --line:         #DCE0E8;
+  --line-strong:  #C2C8D5;
+
+  --ink:          #141C33;
+  --ink-2:        #39425E;
+  --ink-3:        #5C6480;
+
+  --primary-bg:   #141C33;
+  --primary-hover:#26304F;
+  --primary-fg:   #FFFFFF;
+
+  --signal:       #FFC83D;
+  --signal-hover: #FFBA14;
+  --signal-ink:   #141C33;
+  --signal-soft:  #FFF2C9;
+
+  --ok:           #1D7A51;
+  --ok-soft:      #E1F2E8;
+  --miss:         #B23227;
+  --miss-soft:    #FAE5E2;
+
+  --focus:        #2D55D2;
+  --logo-bg:      #141C33;
+  --scrim:        rgba(12, 17, 32, .48);
+  --shadow-pop:   0 1px 2px rgba(20,28,51,.08), 0 12px 32px rgba(20,28,51,.14);
+  --hatch:        repeating-linear-gradient(-45deg, var(--signal) 0 7px, var(--ink) 7px 14px);
+
+  color-scheme: light;
+}
+
+/* ——— Motyw ciemny ——— */
+:root[data-theme="dark"] {
+  --paper: #0C1120; --surface: #141B2E; --surface-2: #1A2237; --nav-active: #232C45;
+  --line: #262F48; --line-strong: #37415E;
+  --ink: #EDF0F7; --ink-2: #C4CADA; --ink-3: #9098B0;
+  --primary-bg: #EDF0F7; --primary-hover: #D3D8E6; --primary-fg: #0C1120;
+  --signal: #FFC83D; --signal-hover: #FFD466; --signal-ink: #141C33; --signal-soft: rgba(255,200,61,.14);
+  --ok: #55C893; --ok-soft: rgba(85,200,147,.14);
+  --miss: #FF8173; --miss-soft: rgba(255,129,115,.14);
+  --focus: #8FA8FF; --logo-bg: #232C45; --scrim: rgba(0,0,0,.6);
+  --shadow-pop: 0 1px 2px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.5);
+  --hatch: repeating-linear-gradient(-45deg, #FFC83D 0 7px, #0C1120 7px 14px);
+  color-scheme: dark;
+}
+
+/* ——— Tokeny Tailwind 4: generują klasy bg-*, text-*, border-*, rounded-*, font-*, text-* ——— */
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-nav-active: var(--nav-active);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-primary: var(--primary-bg);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--primary-fg);
+  --color-signal: var(--signal);
+  --color-signal-hover: var(--signal-hover);
+  --color-signal-ink: var(--signal-ink);
+  --color-signal-soft: var(--signal-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-miss: var(--miss);
+  --color-miss-soft: var(--miss-soft);
+  --color-focus: var(--focus);
+
+  --font-sans: "Archivo", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-code: "Archivo", "Helvetica Neue", Arial, system-ui, sans-serif;
+
+  /* skala typograficzna (15 px bazowo, krok ~1,25) */
+  --text-xs: 0.75rem;      /* 12 */
+  --text-sm: 0.8125rem;    /* 13 — etykiety, podpisy */
+  --text-base: 0.9375rem;  /* 15 — treść, interfejs */
+  --text-md: 1.0625rem;    /* 17 — nagłówki paneli */
+  --text-lg: 1.25rem;      /* 20 */
+  --text-xl: 1.5625rem;    /* 25 — tytuł strony */
+  --text-2xl: 2rem;        /* 32 */
+  --text-3xl: 2.75rem;     /* 44 */
+  --text-code: clamp(3.5rem, 9vw, 6.5rem); /* kod na tablicy wezwań */
+
+  /* promień według roli */
+  --radius-ticket: 5px;
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-window: 14px;
+
+  --shadow-pop: var(--shadow-pop);
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* ——— Podstawy ——— */
+body {
+  background: var(--paper);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  font-stretch: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { color: var(--ink); font-stretch: 112%; text-wrap: balance; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ——— Narzędzia, których Tailwind nie da z samych tokenów ——— */
+@utility font-code {
+  font-family: var(--font-code);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+@utility font-dense { font-stretch: 88%; }
+@utility font-head { font-stretch: 112%; }
+
+/* Bilet z perforacją po bokach (kod A05 na liście) */
+@utility ticket {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 58px; height: 30px; padding: 0 10px;
+  border-radius: var(--radius-ticket);
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--ink);
+  font-family: var(--font-code); font-stretch: 125%; font-weight: 800; font-variant-numeric: tabular-nums;
+  -webkit-mask: radial-gradient(circle 4px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 4px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+          mask: radial-gradient(circle 4px at 0 50%, #0000 97%, #000) left / 51% 100% no-repeat, radial-gradient(circle 4px at 100% 50%, #0000 97%, #000) right / 51% 100% no-repeat;
+}
+/* Wzór „zapisy wstrzymane” */
+@utility bg-hatch { background: var(--hatch); }
+
+@keyframes eque-flip { from { transform: translateY(18%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes eque-ping { 0% { transform: scale(.6); opacity: .7; } 70%, 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes eque-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
