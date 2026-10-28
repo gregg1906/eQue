@@ -74,6 +74,29 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 .input[aria-invalid="true"] { border-color: var(--queue-skipped); }
 .input-mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-weight: 700; letter-spacing: .04em; }
 
+/* ——— Pole z pływającą etykietą (logowanie) ——— */
+.float-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.float-control { position: relative; }
+.input.input-float { height: 52px; padding: 20px 13px 4px; }
+.float-label {
+  position: absolute; left: 14px; top: 50%; max-width: calc(100% - 28px);
+  font-family: var(--font-ui); font-size: var(--text-base); font-weight: 500; line-height: 1.2; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+  transform: translateY(-50%); transform-origin: 0 50%;
+  /* powrót na miejsce szybszy niż wyjazd w górę */
+  transition: transform var(--dur-fast) var(--ease-out), color var(--dur-fast) ease;
+}
+/* 15 px → 12 px (scale 0.8), środek etykiety 11 px wyżej — nad wpisywanym tekstem */
+.input-float:focus + .float-label,
+.input-float:not(:placeholder-shown) + .float-label {
+  transform: translateY(calc(-50% - 11px)) scale(0.8);
+  transition: transform var(--dur-base) var(--ease-out), color var(--dur-fast) ease;
+}
+.input-float:autofill + .float-label { transform: translateY(calc(-50% - 11px)) scale(0.8); }
+.input-float:-webkit-autofill + .float-label { transform: translateY(calc(-50% - 11px)) scale(0.8); }
+.input-float:focus + .float-label { color: var(--text-brand); }
+.input-float[aria-invalid="true"] + .float-label { color: var(--queue-skipped); }
+
 .search { position: relative; flex: 1 1 220px; min-width: 0; max-width: 360px; }
 .search .icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
 .search .input { padding-left: 36px; }
@@ -315,4 +338,7 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
   .dialog, .dialog-scrim.is-visible .dialog { transform: none; }
   .select-panel, .select-panel.is-open { transform: none; }
   .toast, .toast[data-state="closing"] { transform: none; transition-property: opacity; }
+  .float-label,
+  .input-float:focus + .float-label,
+  .input-float:not(:placeholder-shown) + .float-label { transition-property: color; }
 }

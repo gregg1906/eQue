@@ -253,11 +253,13 @@
 .login-brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: var(--text-lg); color: #fff; }
 /* nazwa placówki — skaluje się z szerokością kolumny, żeby mieściła się w jednej linii */
 .login-big { font-family: var(--font-display); font-weight: 700; font-size: clamp(2rem, 11cqi, 6.5rem); line-height: 1; letter-spacing: -.03em; color: #fff; text-wrap: balance; overflow-wrap: anywhere; }
-.login-art p { color: rgba(255,255,255,.86); max-width: 34ch; font-size: var(--text-md); margin: 0; }
+.login-art p { color: rgba(255,255,255,.86); font-size: var(--text-md); margin: 0; }
 .login-form { padding: 32px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .login-form form { display: flex; flex-direction: column; gap: 16px; max-width: 360px; width: 100%; }
 .login-title { font-size: var(--text-xl); font-weight: 700; margin: 0; }
 .login-sub { color: var(--text-muted); margin: 0; }
+.login-fields { display: flex; flex-direction: column; gap: 12px; }
+.login-form .btn-lg { height: 52px; } /* ta sama wysokość co pola z pływającą etykietą */
 @media (max-width: 859px) {
   .login { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .login-art { padding: 24px; gap: 24px; }

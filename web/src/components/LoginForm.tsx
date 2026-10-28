@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api, setToken, ApiError } from '../lib/api';
 import type { MeResponse, TokenResponse } from '../lib/apiTypes';
 import Button from './ui/Button';
-import { Field, Input } from './ui/Field';
+import FloatingInput from './ui/FloatingInput';
 import Icon from './ui/Icon';
 
 interface LoginFormProps {
@@ -69,28 +69,27 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             </div>
           )}
 
-          <Field label="Login">
-            <Input
+          <div className="login-fields">
+            <FloatingInput
+              label="Login"
               value={username}
               onChange={e => setUsername(e.target.value)}
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
-              placeholder="np. jan.kowalski"
               autoFocus
             />
-          </Field>
-
-          <Field label="Hasło" hint={capsLock ? 'Caps Lock jest włączony.' : undefined}>
-            <Input
+            <FloatingInput
+              label="Hasło"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyUp={trackCapsLock}
               onKeyDown={trackCapsLock}
               autoComplete="current-password"
+              hint={capsLock ? 'Caps Lock jest włączony.' : undefined}
             />
-          </Field>
+          </div>
 
           <Button type="submit" variant="primary" size="lg" block disabled={loading}>
             {loading ? 'Logowanie…' : 'Zaloguj się'}
