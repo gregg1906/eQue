@@ -16,9 +16,10 @@ import LiveIndicator from './components/ui/LiveIndicator';
 import CommandPalette, { type CommandItem } from './components/ui/CommandPalette';
 import EmptyState from './components/ui/EmptyState';
 import { ToastHost } from './components/ui/Toast';
-import { api, getToken, clearToken } from './lib/api';
+import { api, getToken, clearToken, setUnauthorizedHandler, ApiError } from './lib/api';
 import { ws } from './lib/ws';
 import { DialogHost } from './lib/dialogs';
+import { startSessionKeeper } from './lib/session';
 import { runQueueCommand } from './lib/commands';
 import { sortByName } from './lib/sort';
 import { readThemePreference, saveThemePreference, systemPrefersDark, type ThemePreference } from './lib/theme';
@@ -66,12 +67,16 @@ const ADMIN_TABS = ['strona_glowna', 'lokalizacje', 'tablety', 'uzytkownicy', 'u
 const USER_TABS = ['kolejka', 'strona_glowna', 'ustawienia'];
 const NO_LOCATIONS: number[] = [];
 
+const SESSION_EXPIRED = 'Twoja sesja wygasła. Zaloguj się ponownie, żeby kontynuować pracę.';
+
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  /** Komunikat na ekranie logowania, np. o wygaśnięciu sesji. */
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<string>('strona_glowna');
   const [addOpen, setAddOpen] = useState(false);
@@ -111,11 +116,35 @@ export default function App() {
           setSession(s);
           setActiveTab(homeTab(s.role));
         })
-        .catch(() => clearToken())
+        .catch(err => {
+          clearToken();
+          if (err instanceof ApiError && err.status === 401) setLoginNotice(SESSION_EXPIRED);
+        })
         .finally(() => setCheckingSession(false));
     }, 0);
     return () => clearTimeout(id);
   }, []);
+
+  /** Kończy sesję: zamyka panele, czyści token i (opcjonalnie) zostawia komunikat na ekranie logowania. */
+  const endSession = useCallback((notice: string | null) => {
+    setSession(null);
+    setPaletteOpen(false);
+    setNavOpen(false);
+    setAddOpen(false);
+    setIntent(null);
+    clearToken();
+    setLoginNotice(notice);
+  }, []);
+
+  // Wygasła lub odrzucona sesja (REST 401, WS 4001/4003, upływ czasu) → ekran logowania z wyjaśnieniem.
+  useEffect(() => {
+    if (!session) return;
+    const expire = () => endSession(SESSION_EXPIRED);
+    setUnauthorizedHandler(expire);
+    const offWsAuth = ws.onAuthFailure(expire);
+    const stopKeeper = startSessionKeeper({ onExpired: expire, onLogout: () => endSession(null) });
+    return () => { setUnauthorizedHandler(null); offWsAuth(); stopKeeper(); };
+  }, [session, endSession]);
 
   useEffect(() => {
     if (!session) return;
@@ -180,18 +209,12 @@ export default function App() {
 
   const handleLoginSuccess = (me: MeResponse) => {
     const s = meToSession(me);
+    setLoginNotice(null);
     setSession(s);
     setActiveTab(homeTab(s.role));
   };
 
-  const handleLogout = () => {
-    setSession(null);
-    setPaletteOpen(false);
-    setNavOpen(false);
-    setAddOpen(false);
-    setIntent(null);
-    clearToken();
-  };
+  const handleLogout = () => endSession(null);
 
   const hosts = <><DialogHost /><ToastHost /></>;
 
@@ -200,7 +223,7 @@ export default function App() {
   }
 
   if (!session) {
-    return <><LoginForm onLoginSuccess={handleLoginSuccess} />{hosts}</>;
+    return <><LoginForm onLoginSuccess={handleLoginSuccess} notice={loginNotice} />{hosts}</>;
   }
 
   const { id: currentUserId, role, fullName: userName, locationIds } = session;

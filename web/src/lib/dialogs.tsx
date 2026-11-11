@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { setDialogDispatcher, type DialogRequest } from './dialog-actions';
+import { setDialogDispatcher, setDialogDismisser, type DialogRequest } from './dialog-actions';
 import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
 
@@ -37,6 +37,11 @@ export function DialogHost() {
       if (back?.isConnected) back.focus();
     }, 200);
   }, []);
+
+  useEffect(() => {
+    setDialogDismisser(() => settle(false));
+    return () => { setDialogDismisser(null); };
+  }, [settle]);
 
   useEffect(() => {
     if (!pending) return;

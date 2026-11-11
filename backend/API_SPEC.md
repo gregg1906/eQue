@@ -173,6 +173,13 @@ Prefiks i konwencja jak dziś: `/api/v1/...`, zasoby admina pod
 |---|---|---|
 | POST | `/api/v1/auth/login` | 🔧 dziś sprawdza tylko `admins`; ma sprawdzać `users` (dowolna rola). Response rozszerzyć o `role`, `full_name`, `id` — frontend dziś od razu po loginie potrzebuje wiedzieć kim jest, nie tylko mieć token. |
 | GET | `/api/v1/auth/me` | 🆕 zwraca profil aktualnie zalogowanego na podstawie tokena (`id`, `full_name`, `role`, `location_ids`). Frontend dziś *ufa* temu, co sam zapisał w `localStorage` — to jedyne miejsce, gdzie warto to zweryfikować po stronie serwera. |
+| POST | `/api/v1/auth/refresh` | ✅ wdrożone — wydaje nowy token (ta sama odpowiedź co `login`) w miejsce wciąż ważnego. Panel woła to po połowie czasu życia tokena, jeśli użytkownik był aktywny; bez aktywności token wygasa (`ACCESS_TOKEN_EXPIRE_MINUTES`, domyślnie 120) i panel wylogowuje z komunikatem, a 5 min wcześniej pyta, czy przedłużyć. Wygasły token lub dezaktywowane konto → `401`. |
+
+**Uprawnienia (wymuszane przez backend, nie tylko ukryte w UI):**
+- tylko `ADMIN`: wszystkie `/admin/tablets*`, `/admin/users*` oraz tworzenie/edycja/usuwanie/(de)aktywacja `/admin/locations*` (`403` dla operatora); admin nie może odebrać sobie roli; rola musi być `ADMIN` albo `OPERATOR` (`422`);
+- `ADMIN` lub operator przypisany do lokalizacji: `GET /admin/locations/{id}/queue`, `pause-queue`, `resume-queue`, `/admin/tickets/{id}/call|complete|cancel` (`403` dla cudzej lokalizacji);
+- `GET /admin/locations` — admin widzi wszystkie, operator tylko swoje;
+- WebSocket: operator może subskrybować tylko `location:{id}` swoich lokalizacji, kiosk tylko `tablet:{id}` i swoją lokalizację (pozostałe topiki są pomijane w odpowiedzi `subscribed`); `pairing_token` w zdarzeniach `device.*` trafia wyłącznie na topik `admin`; nieważny/wygasły token → zamknięcie z kodem `4001`, nieaktywne konto → `4003`.
 
 ### Users (zakładka Użytkownicy)
 

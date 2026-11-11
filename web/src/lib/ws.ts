@@ -3,6 +3,8 @@ import { getToken } from './api';
 const PING_INTERVAL_MS = 20000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
+/** Kody zamknięcia z backendu: 4001 — nieważny/wygasły token, 4003 — konto nieaktywne. */
+const AUTH_CLOSE_CODES = new Set([4001, 4003]);
 
 export type WsMessage = { type: string; topic?: string; [key: string]: unknown };
 export type WsStatus = 'connected' | 'reconnecting';
@@ -14,6 +16,7 @@ class WsClient {
   private handlers = new Map<string, Set<Handler>>();
   private reconnectHandlers = new Set<() => void>();
   private statusHandlers = new Set<(status: WsStatus) => void>();
+  private authFailureHandlers = new Set<() => void>();
   private status: WsStatus = 'reconnecting';
   private hasConnectedOnce = false;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -53,6 +56,12 @@ class WsClient {
   onReconnect(handler: () => void): () => void {
     this.reconnectHandlers.add(handler);
     return () => this.reconnectHandlers.delete(handler);
+  }
+
+  /** Serwer odrzucił token — ponawianie połączenia nic nie da, trzeba zalogować się ponownie. */
+  onAuthFailure(handler: () => void): () => void {
+    this.authFailureHandlers.add(handler);
+    return () => this.authFailureHandlers.delete(handler);
   }
 
   onStatus(handler: (status: WsStatus) => void): () => void {
@@ -102,9 +111,15 @@ class WsClient {
       this.handlers.get(message.type)?.forEach(h => h(message));
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
       if (this.closedByClient) return;
+      if (AUTH_CLOSE_CODES.has(event.code)) {
+        // bez tego klient łączyłby się w kółko z tym samym, odrzuconym tokenem
+        this.setStatus('reconnecting');
+        this.authFailureHandlers.forEach(h => h());
+        return;
+      }
       this.setStatus('reconnecting');
       this.reconnectTimer = setTimeout(() => this.open(), this.reconnectDelay);
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS);

@@ -14,9 +14,19 @@ export interface DialogRequest extends DialogOptions {
 }
 
 let dispatch: ((req: DialogRequest) => void) | null = null;
+let dismiss: (() => void) | null = null;
 
 export function setDialogDispatcher(fn: ((req: DialogRequest) => void) | null) {
   dispatch = fn;
+}
+
+export function setDialogDismisser(fn: (() => void) | null) {
+  dismiss = fn;
+}
+
+/** Zamyka otwarty dialog tak, jakby wybrano „Anuluj” (np. sesja wygasła, zanim ktoś odpowiedział). */
+export function closeDialog() {
+  dismiss?.();
 }
 
 function request(kind: DialogRequest['kind'], message: string, opts: DialogOptions): Promise<boolean> {

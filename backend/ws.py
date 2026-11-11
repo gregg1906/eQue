@@ -73,7 +73,10 @@ class ConnectionManager:
             target_topics = {"admin", topic}
             wyślij do każdego gniazda, którego topics ∩ target_topics ≠ ∅
         """
-        target = {"admin", topic}
+        # `_skip_admin` — kopia zdarzenia przeznaczona tylko dla danego topiku (np. bez
+        # tokenu parowania); panel admina dostaje pełną wersję osobnym zdarzeniem na "admin".
+        skip_admin = message.pop("_skip_admin", False)
+        target = {topic} if skip_admin else {"admin", topic}
         disconnected: list[WebSocket] = []
 
         for ws, subscribed in list(self._connections.items()):
@@ -139,7 +142,7 @@ async def redis_pubsub_listener(redis_client) -> None:
         await pubsub.aclose()
 
 
-async def publish_event(redis_client, topic: str, event_type: str, payload: dict) -> None:
+async def publish_event(redis_client, topic: str, event_type: str, payload: dict, skip_admin: bool = False) -> None:
     """
     Publikuje event na kanał Redis. Wywołuj z endpointów REST po każdej mutacji
     (CRUD tabletów, lokalizacji, zmiany statusu biletu itp.).
@@ -161,4 +164,6 @@ async def publish_event(redis_client, topic: str, event_type: str, payload: dict
         "type": event_type,
         **payload,
     }
+    if skip_admin:
+        message["_skip_admin"] = True
     await redis_client.publish(REDIS_CHANNEL, json.dumps(message, default=str))

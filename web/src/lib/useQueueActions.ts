@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, getToken } from './api';
+import { ApiError, errorDetail, getToken, notifyUnauthorized } from './api';
 import type { LocationResponse, QueueResponse, TicketResponse } from './apiTypes';
 import { recordResolved, removeResolved } from './ticketActivity';
 import { nowIso } from './time';
@@ -27,7 +27,7 @@ interface Entry {
   action: QueueAction;
   at: string;
   status: 'pending' | 'sending';
-  /** Token z chwili akcji — żądanie wysłane po wylogowaniu nadal się uwierzytelni. */
+  /** Token z chwili akcji — gdy operator się wyloguje, zanim żądanie wyjdzie, nadal się uwierzytelni. */
   token: string | null;
 }
 
@@ -53,14 +53,9 @@ async function post(path: string, token: string | null): Promise<unknown> {
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`/api/v1${path}`, { method: 'POST', headers, keepalive: true });
   if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-    } catch {
-      // odpowiedź nie była JSON-em — zostaje statusText
-    }
-    throw new ApiError(res.status, detail);
+    // po wylogowaniu (brak bieżącego tokena) nie ma już sesji do zakończenia
+    if (res.status === 401 && getToken()) notifyUnauthorized();
+    throw new ApiError(res.status, await errorDetail(res));
   }
   const text = await res.text();
   return text ? JSON.parse(text) : undefined;
@@ -159,13 +154,15 @@ class QueueActionController {
 
   private async send(entry: Entry, mode: FlushMode) {
     const steps = stepsFor(entry.action);
+    // bieżący token ma pierwszeństwo — w trakcie okna „Cofnij” mógł zostać odnowiony
+    const token = getToken() ?? entry.token;
     const succeeded = steps.map(() => false);
     let result: unknown;
     let error: unknown = null;
 
     if (mode === 'parallel') {
       // Kroki dotyczą różnych biletów (complete obecnego, call następnego), więc kolejność nie jest wymagana.
-      const settled = await Promise.allSettled(steps.map(path => post(path, entry.token)));
+      const settled = await Promise.allSettled(steps.map(path => post(path, token)));
       settled.forEach((r, i) => {
         if (r.status === 'fulfilled') { succeeded[i] = true; result = r.value; }
         else if (error === null) error = r.reason;
@@ -173,7 +170,7 @@ class QueueActionController {
     } else {
       for (let i = 0; i < steps.length; i++) {
         try {
-          result = await post(steps[i], entry.token);
+          result = await post(steps[i], token);
           succeeded[i] = true;
         } catch (err) {
           error = err;

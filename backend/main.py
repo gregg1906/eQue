@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import redis.asyncio as aioredis
 import models
-from auth import verify_password, create_access_token, hash_password, get_current_user, get_db
+from auth import (
+    verify_password, create_access_token, hash_password, get_current_user, get_db,
+    require_admin, ensure_location_access, VALID_ROLES, ROLE_ADMIN,
+)
 from ws import manager as ws_manager, redis_pubsub_listener, publish_event, REDIS_CHANNEL
 
 from datetime import datetime, timezone
@@ -219,12 +222,21 @@ async def _broadcast_tablet_update(redis_client, tablet: models.Tablet, event_ty
     `tablet:{id}`) — dzięki temu kiosk (podłączony przez WS swoim pairing_token,
     zanim jeszcze miał przypisaną lokalizację) natychmiast dowiaduje się o
     przypisaniu/zmianie, zamiast czekać na kolejny cykl pollingu REST.
+
+    Pełny obiekt (z pairing_token) trafia tylko na "admin". Operatorzy lokalizacji
+    i sam kiosk dostają kopię bez tokenu — inaczej każdy operator mógłby przechwycić
+    świeżo zresetowany token i sparować nim własne urządzenie.
     """
-    payload = {"tablet": _tablet_to_response(tablet).model_dump()}
-    await publish_event(redis_client, "admin", event_type, payload)
+    await publish_event(redis_client, "admin", event_type, {"tablet": _tablet_to_response(tablet).model_dump()})
+    public = {"tablet": _tablet_public(tablet)}
     if tablet.location_id:
-        await publish_event(redis_client, f"location:{tablet.location_id}", event_type, payload)
-    await publish_event(redis_client, f"tablet:{tablet.id}", event_type, payload)
+        await publish_event(redis_client, f"location:{tablet.location_id}", event_type, public, skip_admin=True)
+    await publish_event(redis_client, f"tablet:{tablet.id}", event_type, public, skip_admin=True)
+
+
+def _tablet_public(tablet: models.Tablet) -> dict:
+    """Tablet bez tokenu parowania — do zdarzeń dla topików innych niż "admin"."""
+    return _tablet_to_response(tablet).model_dump() | {"pairing_token": None}
 
 
 def _current_serving_ticket_code(location_id: int, db: Session) -> str | None:
@@ -248,6 +260,11 @@ def _user_to_response(user: models.User) -> UserResponse:
         location_ids=[loc.id for loc in user.locations],
         online=_is_online(user),
     )
+
+
+def _validate_role(role: str) -> None:
+    if role not in VALID_ROLES:
+        raise HTTPException(status_code=422, detail=f"Nieznana rola '{role}' (dozwolone: ADMIN, OPERATOR)")
 
 
 def _get_user_or_404(user_id: uuid.UUID, db: Session) -> models.User:
@@ -314,6 +331,23 @@ async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
         "id": user.id,
         "role": user.role,
         "full_name": user.full_name,
+    }
+
+
+@app.post("/api/v1/auth/refresh", response_model=TokenResponse, tags=["Auth"])
+async def refresh_token(current_user: models.User = Depends(get_current_user)):
+    """
+    Wydaje nowy token w miejsce wciąż ważnego. Panel woła to, gdy użytkownik jest aktywny,
+    więc sesja trwa całą zmianę; bez aktywności token wygasa po ACCESS_TOKEN_EXPIRE_MINUTES
+    i komputer zostawiony bez opieki wylogowuje się sam. Wygasłego tokena odnowić się nie da
+    (401) — wtedy trzeba zalogować się ponownie. Dezaktywowane konto też dostaje 401.
+    """
+    return {
+        "access_token": create_access_token(data={"sub": current_user.username}),
+        "token_type": "bearer",
+        "id": current_user.id,
+        "role": current_user.role,
+        "full_name": current_user.full_name,
     }
 
 
@@ -444,6 +478,70 @@ async def get_kiosk_signup_code(
     return SignupCodeResponse(signup_code=code, expires_in_seconds=_SIGNUP_CODE_TTL_SECONDS)
 
 
+WS_CLOSE_UNAUTHORIZED = 4001  # brak / nieważny / wygasły token
+WS_CLOSE_FORBIDDEN = 4003     # konto nie istnieje albo jest nieaktywne
+
+
+async def _reject_websocket(websocket: WebSocket, code: int) -> None:
+    """
+    Odrzuca połączenie z kodem aplikacyjnym. Zamknięcie PRZED accept() serwer zamienia
+    na odpowiedź HTTP 403, a przeglądarka widzi wtedy tylko kod 1006 i nie wie, że sesja
+    wygasła — dlatego najpierw akceptujemy, potem zamykamy z kodem 4001/4003.
+    """
+    await websocket.accept()
+    await websocket.close(code=code)
+
+
+def _filter_topics(requested, allowed: set[str] | None) -> list[str]:
+    """Zostawia tylko dozwolone topiki (allowed=None — wszystkie, czyli administrator)."""
+    if not isinstance(requested, list):
+        return []
+    topics = [t for t in requested if isinstance(t, str)]
+    if allowed is None:
+        return topics
+    rejected = [t for t in topics if t not in allowed]
+    if rejected:
+        logger.warning("WS: odrzucono niedozwolone topiki: %s", rejected)
+    return [t for t in topics if t in allowed]
+
+
+def _allowed_user_topics(user_id) -> set[str] | None:
+    """
+    Topiki, które może subskrybować użytkownik panelu — liczone przy każdej subskrypcji
+    z bazy, bo przypisania operatora mogą się zmienić w trakcie sesji.
+    Administrator: wszystkie (None). Operator: tylko `location:{id}` swoich lokalizacji.
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if not user or not user.is_active:
+            return set()
+        if user.role == ROLE_ADMIN:
+            return None
+        return {f"location:{loc.id}" for loc in user.locations}
+    finally:
+        db.close()
+
+
+def _allowed_tablet_topics(tablet_id: int) -> set[str]:
+    """Kiosk może słuchać tylko siebie i lokalizacji, do której jest teraz przypisany."""
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        tablet = db.query(models.Tablet).filter(models.Tablet.id == tablet_id).first()
+        if not tablet:
+            return set()
+        allowed = {f"tablet:{tablet.id}"}
+        if tablet.location_id:
+            allowed.add(f"location:{tablet.location_id}")
+        return allowed
+    finally:
+        db.close()
+
+
 @app.websocket("/api/v1/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -533,7 +631,8 @@ async def websocket_endpoint(
                 msg_type = data.get("type")
 
                 if msg_type == "subscribe":
-                    topics = data.get("topics", [])
+                    allowed = _allowed_tablet_topics(tablet_id)
+                    topics = _filter_topics(data.get("topics", []), allowed)
                     ws_manager.subscribe(websocket, topics)
                     await ws_manager.send_personal(websocket, {"type": "subscribed", "topics": topics})
 
@@ -557,7 +656,7 @@ async def websocket_endpoint(
         return
 
     if not token:
-        await websocket.close(code=4001)
+        await _reject_websocket(websocket, WS_CLOSE_UNAUTHORIZED)
         return
 
     import jwt as _jwt
@@ -567,20 +666,18 @@ async def websocket_endpoint(
         payload = _jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         if not username:
-            await websocket.close(code=4001)
+            await _reject_websocket(websocket, WS_CLOSE_UNAUTHORIZED)
             return
-    except _jwt.ExpiredSignatureError:
-        await websocket.close(code=4001)
-        return
     except _jwt.PyJWTError:
-        await websocket.close(code=4001)
+        # obejmuje też ExpiredSignatureError — panel po kodzie 4001 kończy sesję zamiast łączyć się w kółko
+        await _reject_websocket(websocket, WS_CLOSE_UNAUTHORIZED)
         return
 
     db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.username == username).first()
         if not user or not user.is_active:
-            await websocket.close(code=4003)
+            await _reject_websocket(websocket, WS_CLOSE_FORBIDDEN)
             return
         user_id = str(user.id)
         user_role = user.role
@@ -632,7 +729,8 @@ async def websocket_endpoint(
             msg_type = data.get("type")
 
             if msg_type == "subscribe":
-                topics = data.get("topics", [])
+                allowed = _allowed_user_topics(user.id)
+                topics = _filter_topics(data.get("topics", []), allowed)
                 ws_manager.subscribe(websocket, topics)
                 await ws_manager.send_personal(websocket, {
                     "type": "subscribed",
@@ -912,7 +1010,7 @@ async def guest_websocket_endpoint(
 @app.get("/api/v1/admin/tablets", response_model=list[TabletResponse], tags=["Admin — Tablets"])
 async def get_all_tablets(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Lista wszystkich tabletów z wyliczonym statusem online."""
     return [_tablet_to_response(t) for t in db.query(models.Tablet).all()]
@@ -923,7 +1021,7 @@ async def create_tablet(
     data: TabletCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Tworzy nowy tablet.
@@ -949,7 +1047,10 @@ async def create_tablet(
     payload = {"tablet": response.model_dump()}
     await publish_event(request.app.state.redis, "admin", "device.created", payload)
     if new_tablet.location_id:
-        await publish_event(request.app.state.redis, f"location:{new_tablet.location_id}", "device.created", payload)
+        await publish_event(
+            request.app.state.redis, f"location:{new_tablet.location_id}", "device.created",
+            {"tablet": _tablet_public(new_tablet)}, skip_admin=True,
+        )
     if displaced_tablet:
         await _broadcast_tablet_update(request.app.state.redis, displaced_tablet)
 
@@ -962,7 +1063,7 @@ async def update_tablet(
     data: TabletUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Edytuje tablet.
@@ -998,7 +1099,7 @@ async def delete_tablet(
     tablet_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     tablet = _get_tablet_or_404(tablet_id, db)
     old_location_id = tablet.location_id
@@ -1019,7 +1120,7 @@ async def activate_tablet(
     tablet_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Aktywuje tablet."""
     tablet = _get_tablet_or_404(tablet_id, db)
@@ -1037,7 +1138,7 @@ async def deactivate_tablet(
     tablet_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Dezaktywuje tablet i odłącza go od lokalizacji (kaskada wg API_SPEC §4).
@@ -1054,7 +1155,7 @@ async def deactivate_tablet(
     if old_location_id:
         await publish_event(
             request.app.state.redis, f"location:{old_location_id}", "device.updated",
-            {"tablet": _tablet_to_response(tablet).model_dump()},
+            {"tablet": _tablet_public(tablet)}, skip_admin=True,
         )
 
     return _tablet_to_response(tablet)
@@ -1065,7 +1166,7 @@ async def reset_tablet_pairing(
     tablet_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Generuje nowy `pairing_token`, unieważniając poprzedni — fizyczne urządzenie,
@@ -1090,8 +1191,15 @@ async def get_all_locations(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Lista wszystkich lokalizacji z przypisanym tabletem i listą operatorów."""
-    return [_location_to_response(loc) for loc in db.query(models.Location).all()]
+    """
+    Lista lokalizacji z przypisanym tabletem i listą operatorów.
+    Administrator widzi wszystkie, operator — tylko te, do których jest przypisany.
+    """
+    if current_user.role == ROLE_ADMIN:
+        locations = db.query(models.Location).all()
+    else:
+        locations = current_user.locations
+    return [_location_to_response(loc) for loc in locations]
 
 
 @app.post("/api/v1/admin/locations", response_model=LocationResponse, status_code=201, tags=["Admin — Locations"])
@@ -1099,7 +1207,7 @@ async def create_location(
     data: LocationCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Tworzy nową lokalizację. Litera kodu kolejki (queue_code) jest nadawana automatycznie."""
     new_loc = models.Location(
@@ -1127,7 +1235,7 @@ async def update_location(
     data: LocationUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Edytuje lokalizację.
@@ -1191,7 +1299,7 @@ async def delete_location(
     location_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Usuwa lokalizację.
@@ -1230,7 +1338,7 @@ async def activate_location(
     location_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Aktywuje lokalizację."""
     loc = _get_location_or_404(location_id, db)
@@ -1251,7 +1359,7 @@ async def deactivate_location(
     location_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Dezaktywuje lokalizację. Kaskada wg API_SPEC §4:
@@ -1288,6 +1396,7 @@ async def pause_location_queue(
     czekających biletów trwa dalej, `queue/join` tylko odmawia nowym klientom,
     a kiosk pokazuje to osobnym, mniej inwazyjnym komunikatem.
     """
+    ensure_location_access(current_user, location_id)
     loc = _get_location_or_404(location_id, db)
     loc.accepting_new_tickets = False
     db.commit()
@@ -1309,6 +1418,7 @@ async def resume_location_queue(
     current_user: models.User = Depends(get_current_user),
 ):
     """Wznawia przyjmowanie nowych zapisów do kolejki (patrz pause_location_queue)."""
+    ensure_location_access(current_user, location_id)
     loc = _get_location_or_404(location_id, db)
     loc.accepting_new_tickets = True
     db.commit()
@@ -1325,7 +1435,7 @@ async def resume_location_queue(
 @app.get("/api/v1/admin/users", response_model=list[UserResponse], tags=["Admin — Users"])
 async def get_all_users(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Zwraca listę wszystkich użytkowników wraz z przypisanymi lokalizacjami."""
     users = db.query(models.User).all()
@@ -1337,9 +1447,10 @@ async def create_user(
     data: UserCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Tworzy nowego użytkownika. Hasło jest hashowane bcryptem."""
+    _validate_role(data.role)
     existing = db.query(models.User).filter(models.User.username == data.username).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Użytkownik '{data.username}' już istnieje")
@@ -1380,7 +1491,7 @@ async def update_user(
     data: UserUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Edytuje dane użytkownika.
@@ -1402,6 +1513,12 @@ async def update_user(
     if data.position is not None:
         user.position = data.position
     if data.role is not None:
+        _validate_role(data.role)
+        if user.id == current_user.id and data.role != ROLE_ADMIN:
+            raise HTTPException(
+                status_code=400,
+                detail="Nie możesz odebrać sobie roli administratora — poproś o to innego administratora",
+            )
         user.role = data.role
     if data.password:
         user.password_hash = hash_password(data.password)
@@ -1431,7 +1548,7 @@ async def delete_user(
     user_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Usuwa użytkownika. Wiersze w user_locations są usuwane kaskadowo
@@ -1461,7 +1578,7 @@ async def activate_user(
     user_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """Aktywuje konto użytkownika."""
     user = _get_user_or_404(user_id, db)
@@ -1483,7 +1600,7 @@ async def deactivate_user(
     user_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_admin),
 ):
     """
     Dezaktywuje konto użytkownika i kaskadowo czyści jego wiersze w user_locations
@@ -1522,6 +1639,7 @@ async def get_location_queue(
     - waiting: lista biletów WAITING posortowana po joined_at (najstarszy = pierwszy)
     - serving: aktualnie obsługiwany bilet (SERVING) lub null
     """
+    ensure_location_access(current_user, location_id)
     _get_location_or_404(location_id, db)
 
     waiting = (
@@ -1568,6 +1686,7 @@ async def call_ticket(
     Wysyła event YOUR_TURN do wezwanego pacjenta i QUEUE_UPDATE do pozostałych.
     """
     ticket = _get_ticket_or_404(ticket_id, db)
+    ensure_location_access(current_user, ticket.location_id)
     if ticket.status != "WAITING":
         raise HTTPException(
             status_code=409,
@@ -1617,6 +1736,7 @@ async def complete_ticket(
     Rozsyła QUEUE_UPDATE do pozostałych WAITING pacjentów.
     """
     ticket = _get_ticket_or_404(ticket_id, db)
+    ensure_location_access(current_user, ticket.location_id)
     if ticket.status != "SERVING":
         raise HTTPException(
             status_code=409,
@@ -1658,6 +1778,7 @@ async def cancel_ticket(
     Rozsyła QUEUE_UPDATE do pozostałych WAITING pacjentów.
     """
     ticket = _get_ticket_or_404(ticket_id, db)
+    ensure_location_access(current_user, ticket.location_id)
     if ticket.status in ("COMPLETED", "CANCELLED"):
         raise HTTPException(
             status_code=409,

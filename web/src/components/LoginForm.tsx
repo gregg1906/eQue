@@ -7,12 +7,14 @@ import Icon from './ui/Icon';
 
 interface LoginFormProps {
   onLoginSuccess: (me: MeResponse) => void;
+  /** Informacja nad formularzem, np. że sesja wygasła z powodu braku aktywności. */
+  notice?: string | null;
 }
 
 const FACILITY_NAME = 'Testowy szpital';
 const INVALID_CREDENTIALS ='Login lub hasło są nieprawidłowe. Sprawdź, czy nie masz włączonego Caps Lock.';
 
-export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
+export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -61,6 +63,13 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         <form onSubmit={handleLogin} noValidate>
           <h1 className="login-title">Zaloguj się</h1>
           <p className="login-sub">Panel przeznaczony dla personelu.</p>
+
+          {notice && !error && (
+            <div className="note" role="status">
+              <Icon name="info" />
+              <span>{notice}</span>
+            </div>
+          )}
 
           {error && (
             <div className="form-error" role="alert">

@@ -1,3 +1,4 @@
+import os
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -6,9 +7,16 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from database import SessionLocal
 
-SECRET_KEY = "super-sekretny-klucz-kolejki"
+# W produkcji klucz MUSI przyjść ze zmiennej środowiskowej — wartość domyślna jest tylko dla środowiska deweloperskiego.
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-sekretny-klucz-kolejki")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
+# Czas życia tokena = limit bezczynności. Aktywny użytkownik odnawia token (POST /auth/refresh)
+# przed wygaśnięciem, więc sesja trwa całą zmianę, a porzucony komputer wylogowuje się sam.
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "120"))
+
+ROLE_ADMIN = "ADMIN"
+ROLE_OPERATOR = "OPERATOR"
+VALID_ROLES = {ROLE_ADMIN, ROLE_OPERATOR}
 
 bearer_scheme = HTTPBearer()
 
@@ -35,8 +43,10 @@ def hash_password(plain_password: str) -> str:
 def create_access_token(data: dict) -> str:
     """Generuje nowy token JWT."""
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # iat pozwala panelowi policzyć czas życia tokena i odnowić go w połowie, bez zgadywania
+    to_encode.update({"exp": expire, "iat": now})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -76,8 +86,39 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     if not user.is_active:
+        # 401, a nie 403: token przestał uwierzytelniać (admin wyłączył konto w trakcie sesji),
+        # więc panel ma zakończyć sesję. 403 zostaje dla „zalogowany, ale bez uprawnień”.
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Konto użytkownika jest nieaktywne",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def require_admin(current_user=Depends(get_current_user)):
+    """
+    Dependency FastAPI: przepuszcza tylko administratora. Ukrycie zakładek w panelu
+    to wyłącznie wygoda — o uprawnieniach decyduje backend, bo token operatora
+    można wykorzystać bezpośrednio (curl, Swagger) z pominięciem interfejsu.
+    """
+    if current_user.role != ROLE_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ta operacja wymaga uprawnień administratora",
+        )
+    return current_user
+
+
+def ensure_location_access(user, location_id: int) -> None:
+    """
+    Operator może działać tylko na kolejkach lokalizacji, do których jest przypisany
+    (tabela user_locations). Administrator ma dostęp do wszystkich lokalizacji.
+    """
+    if user.role == ROLE_ADMIN:
+        return
+    if location_id not in {loc.id for loc in user.locations}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nie masz dostępu do tej lokalizacji",
+        )
