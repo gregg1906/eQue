@@ -23,7 +23,8 @@ category, is_active), `tablets` (id, name, location, service_point_id),
 `tickets` (id, ticket_code, status, joined_at, service_point_id).
 
 Endpointy: `POST /api/v1/auth/login` (działa, tylko dla admina),
-`GET /api/v1/kiosk/status`, `POST /api/v1/queue/join` (oba wdrożone — patrz sekcja 4),
+`GET /api/v1/kiosk/status`, `GET /api/v1/kiosk/signup-code`, `POST /api/v1/queue/join`
+(wszystkie wdrożone — patrz sekcja 4),
 CRUD `GET/POST/PUT/DELETE /api/v1/admin/tablets` (działa na realnej bazie).
 
 **Uwaga historyczna:** ta sekcja opisywała stan projektu sprzed refaktoryzacji
@@ -101,7 +102,7 @@ Legenda: 🆕 nowa tabela, 🔧 zmiana istniejącej, ✅ bez zmian.
 | `description` | String(255), nullable | **nowe** — frontend ma to pole (`AdminLocations.tsx`), dziś go nie ma |
 | `category` | String(100) | zostaje, frontend go nie używa, ale niech będzie na przyszłość |
 | `is_active` | bool, default `True` | bez zmian — używane przy dezaktywacji |
-| `queue_code` | String(2), unique | **wdrożone** — stała litera kolejki (np. "A"), nadawana automatycznie (pierwsza wolna A-Z) przy tworzeniu lokalizacji. Klient wpisuje ją w aplikacji mobilnej, żeby dołączyć do kolejki tej lokalizacji; jest też prefiksem `ticket_code` (np. "A01"). |
+| `queue_code` | String(2), unique | **wdrożone** — stała litera kolejki (np. "A"), nadawana automatycznie (pierwsza wolna A-Z) przy tworzeniu lokalizacji. **Nie służy do dołączania do kolejki** — jest tylko informacją na ekranie kiosku i prefiksem `ticket_code` (np. "A01"). Do zapisu służy wyłącznie krótkotrwały kod zapisu (`signup_code`, patrz sekcja 4, "Kiosk"), bo stałą literę zbyt łatwo zapamiętać i przekazać dalej bez fizycznej obecności przy kiosku. |
 
 Relacje: `1—N` do `tablets` (ale logicznie max 1 aktywny dzięki `UNIQUE`),
 `N—N` do `users` przez tabelę łączącą (niżej), `1—N` do `tickets`.
@@ -214,7 +215,8 @@ jednorazowe, bez skanowania QR ani wygasających tokenów.
 | metoda | ścieżka | opis |
 |---|---|---|
 | POST | `/api/v1/admin/tablets` | ✅ **wdrożone** — tworzy wiersz w `tablets` (pusta `name`, `location_id=NULL`, `is_active=True`) i **od razu** generuje stały `pairing_token`, zwrócony w odpowiedzi. Panel webowy (zakładka Tablety) wyświetla ten token operatorowi. |
-| GET | `/api/v1/kiosk/status` | ✅ **wdrożone** — heartbeat + stan kiosku. Tablet odpytuje cyklicznie (~20s) z `?tablet_token=<pairing_token>` (query param, bez JWT); serwer bije `last_seen_at` i zwraca `queue_code` + `current_ticket_code` lokalizacji przypisanej temu tabletowi (albo `null`, jeśli tablet nie ma jeszcze przypisanej lokalizacji — admin przypisuje ją później w zakładce Tablety/Lokalizacje). |
+| GET | `/api/v1/kiosk/status` | ✅ **wdrożone** — heartbeat + stan kiosku. Tablet odpytuje cyklicznie (~20s) z `?tablet_token=<pairing_token>&device_id=<id urządzenia>` (query param, bez JWT); serwer bije `last_seen_at` i zwraca `queue_code` + `current_ticket_code` lokalizacji przypisanej temu tabletowi (albo `null`, jeśli tablet nie ma jeszcze przypisanej lokalizacji — admin przypisuje ją później w zakładce Tablety/Lokalizacje). |
+| GET | `/api/v1/kiosk/signup-code` | ✅ **wdrożone** — `?tablet_token=<pairing_token>&device_id=<id urządzenia>`. Generuje świeży, 4-cyfrowy **kod zapisu** (`signup_code`) ważny 30s dla lokalizacji tego tabletu; response `{ signup_code, expires_in_seconds }`. Kod trzymany w Redis (`signup_code:{location_id}` + `signup_lookup:{code}`, TTL 30s); wygenerowanie nowego **od razu unieważnia poprzedni**. Kiosk odpytuje to kilka sekund przed wygaśnięciem i pokazuje kod jako tekst + QR (QR koduje ten sam 4-cyfrowy kod). `401` dla nieaktywnego tabletu, `409` gdy tablet nie ma przypisanej lokalizacji. |
 
 Instalator wpisuje `pairing_token` ręcznie w aplikacji mobilnej, w zakładce
 "Konfiguracja kiosku" — od tego momentu tablet zaczyna odpytywać
@@ -225,7 +227,9 @@ przypisaną lokalizację.
 
 | metoda | ścieżka | opis |
 |---|---|---|
-| POST | `/api/v1/queue/join` | ✅ **wdrożone** — body `{ queue_code, customer_name?, appointment_time? }`. `queue_code` to stała litera lokalizacji (np. "A"), wpisana ręcznie przez klienta albo zeskanowana z QR na ekranie kiosku (który koduje tę samą literę). Tworzy `Ticket(status="WAITING")`, generuje `ticket_code` = `queue_code` + dwucyfrowy numer w danym dniu (reset codziennie per lokalizacja, np. "A01", "A02"...), zwraca kod i pozycję w kolejce. |
+| POST | `/api/v1/queue/join` | ✅ **wdrożone**, publiczne (bez JWT) — body `{ signup_code, customer_name?, appointment_time? }`. `signup_code` to 4-cyfrowy kod zapisu z ekranu kiosku (wpisany ręcznie albo zeskanowany z QR), rozwiązywany przez Redis na `location_id`. Stała litera `queue_code` **nie jest akceptowana**. Błędy: `404` — nieprawidłowy lub wygasły kod / lokalizacja nie istnieje, `409` — lokalizacja nieaktywna albo zapisy wstrzymane (`accepting_new_tickets=False`). Tworzy `Ticket(status="WAITING")`, generuje `ticket_code` = `queue_code` + dwucyfrowy numer w danym dniu (reset codziennie per lokalizacja, np. "A01", "A02"...), publikuje `ticket.created` na `location:{id}`. Response: `{ ticket_id, ticket_code, queue_position, location_id, estimated_wait_time_minutes }`. |
+| GET | `/api/v1/queue/ticket/{ticket_code}` | ✅ **wdrożone**, publiczne — bezstanowy odczyt stanu biletu: `{ ticket_code, status, queue_position, estimated_wait_time_minutes }`. Aplikacja mobilna woła to przy każdym (re)połączeniu WS pacjenta (sekcja 5), żeby nie utknąć na starym stanie po przegapionym evencie. |
+| POST | `/api/v1/queue/cancel` | ✅ **wdrożone**, publiczne — body `{ ticket_code }`. Pacjent sam anuluje swój bilet; tylko dla `status=WAITING` (inaczej `400`). Publikuje `ticket.updated` na `location:{id}` i `QUEUE_UPDATE` do pozostałych oczekujących. |
 | GET | `/api/v1/admin/locations/{id}/queue` | ✅ wdrożone — lista oczekujących (`status=WAITING`, sortowane po `joined_at`) + aktualnie obsługiwany (`status=SERVING`) |
 | POST | `/api/v1/admin/tickets/{id}/call` | ✅ wdrożone — `status→SERVING`, `served_by_user_id=<zalogowany>`, `called_at=now` |
 | POST | `/api/v1/admin/tickets/{id}/complete` | ✅ wdrożone — `status→COMPLETED`, `served_at=now` |
@@ -248,14 +252,19 @@ połączenie na klienta, zero pollingu REST.
 
 ### Połączenie
 
-`WS /api/v1/ws?token=<jwt>` — jeden endpoint, multipleksowany po typach
-zdarzeń, zamiast osobnych socketów per zasób (mniej połączeń = mniej
-narzutu po stronie serwera i przeglądarki). Token w query string przy
-handshake (WS nie ma nagłówków po stronie przeglądarki w prosty sposób);
-ten sam token co REST.
+`WS /api/v1/ws?token=<jwt>` — jeden endpoint dla panelu i kiosków,
+multipleksowany po typach zdarzeń, zamiast osobnych socketów per zasób
+(mniej połączeń = mniej narzutu po stronie serwera i przeglądarki). Token w
+query string przy handshake (WS nie ma nagłówków po stronie przeglądarki w
+prosty sposób); ten sam token co REST.
 
-Tablety łączą się tym samym endpointem, ale swoim `device_token` z
-parowania zamiast tokena admina/operatora.
+Tablety łączą się tym samym endpointem, ale zamiast JWT podają
+`?tablet_token=<pairing_token>&device_id=<id urządzenia>`. Serwer sam
+subskrybuje tablet do `tablet:{id}` i (jeśli ma przypisaną lokalizację) do
+`location:{id}` — tablet nie musi wysyłać `subscribe`.
+
+Pacjent (gość) **nie** używa tego endpointu — ma osobny, publiczny socket,
+patrz "WebSocket pacjenta" niżej.
 
 ### Subskrypcje (filtrowanie po stronie serwera, nie klienta)
 
@@ -290,6 +299,24 @@ nie być ignorowane po stronie klienta.
 | `location.updated` / `location.created` / `location.deleted` | `{ location }` / `{ location_id }` | |
 | `ticket.created` | `{ location_id, ticket }` | dołączenie do kolejki |
 | `ticket.updated` | `{ location_id, ticket }` | wezwanie / zakończenie / anulowanie — to jest też sposób, w jaki tablet dowiaduje się o nowym "aktualnym kodzie" bez osobnego eventu |
+
+### WebSocket pacjenta (gość)
+
+`WS /api/v1/queue/ws/{ticket_code}` — ✅ **wdrożone**, publiczny, bez JWT;
+identyfikacja wyłącznie po `ticket_code` (np. `A01`). Jeśli biletu nie ma,
+serwer zamyka połączenie kodem `4004`. Po połączeniu socket jest
+subskrybowany do topiku `guest:{ticket_code}`; klient nic nie wysyła, tylko
+słucha.
+
+| `event` | payload | kiedy |
+|---|---|---|
+| `YOUR_TURN` | `{ topic, event }` | operator wezwał ten bilet (`/admin/tickets/{id}/call`) |
+| `QUEUE_UPDATE` | `{ topic, event, queue_position, estimated_wait_time_minutes }` | zmiana kolejki (call / complete / cancel przez operatora, anulowanie przez pacjenta) — wysyłane do każdego oczekującego biletu w lokalizacji |
+
+Uwaga: te eventy mają pole `event` (nie `type`) i wielkie litery — inny
+format niż delty z `/api/v1/ws`. Socket nie ma pamięci ani powtórek, więc
+aplikacja mobilna po każdym (re)połączeniu dociąga stan przez
+`GET /api/v1/queue/ticket/{ticket_code}`.
 
 ### Heartbeat = jedyny mechanizm wykrywania online/offline
 
