@@ -1,4 +1,5 @@
 import os
+import logging
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -8,7 +9,13 @@ from sqlalchemy.orm import Session
 from database import SessionLocal
 
 # W produkcji klucz MUSI przyjść ze zmiennej środowiskowej — wartość domyślna jest tylko dla środowiska deweloperskiego.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-sekretny-klucz-kolejki")
+# Pusta zmienna (np. JWT_SECRET_KEY= w docker-compose bez pliku .env) też oznacza wartość domyślną.
+_DEV_SECRET_KEY = "super-sekretny-klucz-kolejki"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY") or _DEV_SECRET_KEY
+if SECRET_KEY == _DEV_SECRET_KEY:
+    logging.getLogger("eque.auth").warning(
+        "JWT_SECRET_KEY nie jest ustawiony — używam klucza deweloperskiego. Ustaw go w .env przed wdrożeniem."
+    )
 ALGORITHM = "HS256"
 # Czas życia tokena = limit bezczynności. Aktywny użytkownik odnawia token (POST /auth/refresh)
 # przed wygaśnięciem, więc sesja trwa całą zmianę, a porzucony komputer wylogowuje się sam.

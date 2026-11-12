@@ -45,8 +45,13 @@ class JoinQueueResponse(BaseModel):
     estimated_wait_time_minutes: int
 
 class PatientCancelRequest(BaseModel):
-    """Body POST /queue/cancel — pacjent samodzielnie anuluje swój bilet."""
-    ticket_code: str
+    """
+    Body POST /queue/cancel — pacjent samodzielnie anuluje swój bilet.
+    `ticket_id` (z odpowiedzi /queue/join) wskazuje bilet jednoznacznie; sam
+    `ticket_code` oznacza najnowszy bilet o tym kodzie (kody powtarzają się co dzień).
+    """
+    ticket_code: Optional[str] = None
+    ticket_id: Optional[str] = None
 
 class TicketStatusResponse(BaseModel):
     """

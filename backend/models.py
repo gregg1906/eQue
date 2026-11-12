@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Boolean, Table, Column
+from datetime import date, datetime, timezone
+from sqlalchemy import String, ForeignKey, DateTime, Date, Boolean, Table, Column, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
+from clock import local_today
 
 
 user_locations = Table(
@@ -32,7 +33,10 @@ class User(Base):
     locations: Mapped[list["Location"]] = relationship(
         secondary=user_locations, back_populates="users"
     )
-    served_tickets: Mapped[list["Ticket"]] = relationship(back_populates="served_by_user")
+    # passive_deletes="all": ORM nie zeruje served_by_user_id przy usuwaniu konta —
+    # klucz obcy bez ON DELETE odrzuci wtedy usunięcie, zamiast po cichu wymazać z historii,
+    # kto obsłużył bilety (delete_user zwraca wcześniej czytelne 409).
+    served_tickets: Mapped[list["Ticket"]] = relationship(back_populates="served_by_user", passive_deletes="all")
 
 
 class Location(Base):
@@ -72,8 +76,21 @@ class Tablet(Base):
     location: Mapped["Location | None"] = relationship(back_populates="tablets")
 
 
+def _service_date_default(context) -> date:
+    """Dzień placówki, w którym wydano bilet — liczony z joined_at w strefie APP_TIMEZONE."""
+    joined = context.get_current_parameters().get("joined_at")
+    if isinstance(joined, datetime) and joined.tzinfo is None:
+        joined = joined.replace(tzinfo=timezone.utc)
+    return local_today(joined if isinstance(joined, datetime) else None)
+
+
 class Ticket(Base):
     __tablename__ = "tickets"
+    # Kod biletu (A01, A02…) jest unikalny w obrębie lokalizacji i dnia placówki —
+    # baza odrzuci duplikat nawet wtedy, gdyby blokada w join_queue zawiodła.
+    __table_args__ = (
+        UniqueConstraint("location_id", "service_date", "ticket_code", name="uq_tickets_location_day_code"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     ticket_code: Mapped[str] = mapped_column(String(10), index=True)
@@ -82,6 +99,9 @@ class Ticket(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     called_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     served_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Dzień placówki (czas lokalny), do którego należy numeracja biletu. NULL tylko
+    # dla starych biletów, których nie dało się jednoznacznie przypisać (zob. migracja).
+    service_date: Mapped[date | None] = mapped_column(Date, nullable=True, default=_service_date_default)
 
     customer_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     appointment_time: Mapped[str | None] = mapped_column(String(20), nullable=True)

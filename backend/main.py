@@ -10,6 +10,7 @@ from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 import redis.asyncio as aioredis
 import models
 from auth import (
@@ -18,7 +19,8 @@ from auth import (
 )
 from ws import manager as ws_manager, redis_pubsub_listener, publish_event, REDIS_CHANNEL
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from clock import local_today
 from typing import Optional
 from schemas.api_schemas import (
     KioskStatusResponse, SignupCodeResponse, JoinQueueRequest, JoinQueueResponse, PatientCancelRequest,
@@ -312,16 +314,63 @@ async def root():
     return {"message": "Witaj w eQue API. Serwer działa poprawnie."}
 
 
+# Limit nieudanych prób logowania (ochrona przed zgadywaniem haseł), liczony w Redisie:
+# osobno dla pary login + adres IP i łącznie dla adresu IP (próby na wielu loginach).
+LOGIN_WINDOW_SECONDS = int(os.getenv("LOGIN_WINDOW_SECONDS", "900"))
+LOGIN_MAX_FAILS_PER_USER = int(os.getenv("LOGIN_MAX_FAILS_PER_USER", "5"))
+LOGIN_MAX_FAILS_PER_IP = int(os.getenv("LOGIN_MAX_FAILS_PER_IP", "30"))
+
+
+def _login_limit_keys(username: str, request: Request) -> list[tuple[str, int]]:
+    ip = request.client.host if request.client else "unknown"
+    return [
+        (f"login_fail:user:{username.strip().lower()}:{ip}", LOGIN_MAX_FAILS_PER_USER),
+        (f"login_fail:ip:{ip}", LOGIN_MAX_FAILS_PER_IP),
+    ]
+
+
+async def _check_login_limit(redis_client, keys: list[tuple[str, int]]) -> None:
+    for key, limit in keys:
+        fails = await redis_client.get(key)
+        if fails is not None and int(fails) >= limit:
+            ttl = max(await redis_client.ttl(key), 1)
+            minutes = -(-ttl // 60)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Zbyt wiele nieudanych prób logowania. Spróbuj ponownie za {minutes} min.",
+                headers={"Retry-After": str(ttl)},
+            )
+
+
+async def _record_login_failure(redis_client, keys: list[tuple[str, int]]) -> None:
+    for key, _ in keys:
+        fails = await redis_client.incr(key)
+        if fails == 1:
+            await redis_client.expire(key, LOGIN_WINDOW_SECONDS)
+
+
 @app.post("/api/v1/auth/login", response_model=TokenResponse, tags=["Auth"])
-async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
+async def login(login_data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
     Weryfikuje poświadczenia i zwraca token JWT wraz z danymi profilu.
     Obsługuje zarówno ADMIN jak i OPERATOR (jedna tabela users).
+
+    Po LOGIN_MAX_FAILS_PER_USER nieudanych próbach dla jednego loginu z jednego adresu IP
+    (albo LOGIN_MAX_FAILS_PER_IP łącznie z adresu) logowanie jest blokowane na
+    LOGIN_WINDOW_SECONDS — odpowiedź 429 z nagłówkiem Retry-After. Udane logowanie
+    zeruje licznik dla tego loginu.
     """
+    redis_client = request.app.state.redis
+    limit_keys = _login_limit_keys(login_data.username, request)
+    await _check_login_limit(redis_client, limit_keys)
+
     user = db.query(models.User).filter(models.User.username == login_data.username).first()
 
     if not user or not verify_password(login_data.password, user.password_hash):
+        await _record_login_failure(redis_client, limit_keys)
         raise HTTPException(status_code=401, detail="Nieprawidłowy login lub hasło")
+
+    await redis_client.delete(limit_keys[0][0])
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Konto jest nieaktywne")
@@ -813,27 +862,23 @@ async def websocket_endpoint(
         await _broadcast_presence("offline")
 
 
-def _generate_ticket_code(location: models.Location, db: Session) -> str:
+def _generate_ticket_code(location: models.Location, day: date, db: Session) -> str:
     """
     Generuje kod biletu = stała litera kolejki lokalizacji + kolejny numer w danym dniu,
-    np. "A01", "A02"... Numeracja resetuje się codziennie per lokalizacja.
-    """
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    count_today = db.query(models.Ticket).filter(
-        models.Ticket.location_id == location.id,
-        models.Ticket.joined_at >= today_start,
-    ).count()
+    np. "A01", "A02"... Numeracja resetuje się o północy czasu placówki (APP_TIMEZONE).
 
-    number = count_today + 1
-    code = f"{location.queue_code}{number:02d}"
-    while db.query(models.Ticket).filter(
+    Numer to największy dzisiejszy numer + 1 (a nie liczba biletów + 1), więc luka
+    w numeracji nie prowadzi do kolizji. Wywołujący musi trzymać blokadę wiersza
+    lokalizacji (join_queue), inaczej dwa równoległe zapisy policzą ten sam numer.
+    """
+    prefix = location.queue_code
+    codes = db.query(models.Ticket.ticket_code).filter(
         models.Ticket.location_id == location.id,
-        models.Ticket.ticket_code == code,
-        models.Ticket.joined_at >= today_start,
-    ).first():
-        number += 1
-        code = f"{location.queue_code}{number:02d}"
-    return code
+        models.Ticket.service_date == day,
+    ).all()
+    numbers = [int(code[len(prefix):]) for (code,) in codes
+               if code.startswith(prefix) and code[len(prefix):].isdigit()]
+    return f"{prefix}{max(numbers, default=0) + 1:02d}"
 
 
 def _ticket_to_response(ticket: models.Ticket) -> TicketResponse:
@@ -875,7 +920,15 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
     if not location_id_raw:
         raise HTTPException(status_code=404, detail="Nieprawidłowy lub wygasły kod zapisu")
 
-    loc = db.query(models.Location).filter(models.Location.id == int(location_id_raw)).first()
+    # SELECT … FOR UPDATE: równoległe zapisy do tej samej lokalizacji czekają tu na siebie
+    # aż do commita, więc każdy widzi bilet poprzedniego i dostaje kolejny numer.
+    # Wcześniej oba liczyły tę samą liczbę biletów i dostawały ten sam kod.
+    loc = (
+        db.query(models.Location)
+        .filter(models.Location.id == int(location_id_raw))
+        .with_for_update()
+        .first()
+    )
     if not loc:
         raise HTTPException(status_code=404, detail="Lokalizacja nie istnieje")
     if not loc.is_active:
@@ -884,19 +937,26 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
         raise HTTPException(status_code=409, detail="Zapisy do tej kolejki są tymczasowo wstrzymane")
 
     location_id = loc.id
-    code = _generate_ticket_code(loc, db)
-
     now = datetime.now(timezone.utc)
+    day = local_today(now)
+    code = _generate_ticket_code(loc, day, db)
+
     ticket = models.Ticket(
         ticket_code=code,
         status="WAITING",
         location_id=location_id,
         joined_at=now,
+        service_date=day,
         customer_name=payload.customer_name,
         appointment_time=payload.appointment_time,
     )
     db.add(ticket)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # ostatnia linia obrony (UNIQUE location_id + service_date + ticket_code)
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Kolejka jest chwilowo zajęta. Spróbuj ponownie.")
 
     queue_position = db.query(models.Ticket).filter(
         models.Ticket.location_id == location_id,
@@ -925,6 +985,20 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
     )
 
 
+def _find_ticket_by_code(ticket_code: str, db: Session) -> models.Ticket | None:
+    """
+    Najnowszy bilet o danym kodzie. Kody (A01, A02…) powtarzają się każdego dnia,
+    więc sam kod nie wskazuje jednego wiersza — bierzemy ostatnio wydany, tak samo
+    w odczycie stanu i w anulowaniu przez pacjenta, żeby oba widziały ten sam bilet.
+    """
+    return (
+        db.query(models.Ticket)
+        .filter(models.Ticket.ticket_code == ticket_code.strip().upper())
+        .order_by(models.Ticket.joined_at.desc())
+        .first()
+    )
+
+
 @app.get("/api/v1/queue/ticket/{ticket_code}", response_model=TicketStatusResponse, tags=["Patient"])
 async def get_ticket_status(ticket_code: str, db: Session = Depends(get_db)):
     """
@@ -934,12 +1008,7 @@ async def get_ticket_status(ticket_code: str, db: Session = Depends(get_db)):
     (np. gniazdo padło tuż przed wezwaniem) zostawiałby pacjenta na zawsze
     z nieaktualnym stanem, bo WS nie ma pamięci ani powtórek.
     """
-    ticket = (
-        db.query(models.Ticket)
-        .filter(models.Ticket.ticket_code == ticket_code.strip().upper())
-        .order_by(models.Ticket.joined_at.desc())
-        .first()
-    )
+    ticket = _find_ticket_by_code(ticket_code, db)
     if not ticket:
         raise HTTPException(status_code=404, detail="Bilet nie został znaleziony")
 
@@ -970,10 +1039,20 @@ async def patient_cancel_ticket(
     """
     Publiczny endpoint — pacjent samodzielnie anuluje swój bilet.
     Dozwolone tylko dla biletów w statusie WAITING.
+
+    Bilet jest wskazywany przez `ticket_id` (jednoznacznie), a gdy go brak — przez
+    `ticket_code`, rozwiązywany na najnowszy bilet o tym kodzie. Wcześniejsze
+    zapytanie bez sortowania mogło od drugiego dnia trafić we wczorajszy bilet
+    o tym samym kodzie i zwrócić 400 zamiast anulować dzisiejszy.
     """
-    ticket = db.query(models.Ticket).filter(
-        models.Ticket.ticket_code == payload.ticket_code
-    ).first()
+    if payload.ticket_id:
+        ticket = _get_ticket_or_404(payload.ticket_id, db)
+        if payload.ticket_code and ticket.ticket_code != payload.ticket_code.strip().upper():
+            raise HTTPException(status_code=404, detail="Bilet nie został znaleziony")
+    elif payload.ticket_code:
+        ticket = _find_ticket_by_code(payload.ticket_code, db)
+    else:
+        raise HTTPException(status_code=422, detail="Podaj ticket_code albo ticket_id")
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
@@ -1611,12 +1690,25 @@ async def delete_user(
     """
     Usuwa użytkownika. Wiersze w user_locations są usuwane kaskadowo
     przez ON DELETE CASCADE zdefiniowany w modelu.
+
+    Konta, które obsłużyło choć jeden bilet, nie da się usunąć (409) — usunięcie
+    wyzerowałoby served_by_user_id i z historii oraz statystyk zniknęłoby, kto
+    obsłużył te bilety. Takie konto należy dezaktywować.
     """
     user = _get_user_or_404(user_id, db)
 
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Nie możesz usunąć własnego konta")
 
+    served = db.query(func.count(models.Ticket.id)).filter(models.Ticket.served_by_user_id == user.id).scalar()
+    if served:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Nie można usunąć konta, które obsłużyło bilety ({served}) — zniknęłoby z historii, "
+                "kto je obsłużył. Dezaktywuj konto zamiast go usuwać."
+            ),
+        )
 
     loc_ids = [loc.id for loc in user.locations]
 

@@ -34,6 +34,9 @@ Cache / Pub-Sub - Redis (WebSockety na żywo + rotujące kody zapisu do kolejki)
 
 Cała infrastruktura bazodanowa, Redis oraz aplikacje frontendowa (React) i mobilna (Flutter Web) są zintegrowane w jednym pliku Docker Compose. Obie działają w trybie Hot Reload — zmiany w kodzie odświeżają się automatycznie (dla Flutter wymaga to restartu kontenera `mobile`, patrz niżej).
 
+### Konfiguracja (opcjonalnie)
+Hasło do bazy, klucz JWT i strefę czasową placówki można ustawić w pliku `.env` (wzór: `.env.example`, plik `.env` nie trafia do repozytorium). Bez niego działają domyślne ustawienia deweloperskie — na serwerze produkcyjnym trzeba ustawić własne.
+
 ### Pierwsze uruchomienie (zbudowanie obrazów, budowanie backendu, seedowanie bazy):
 ```bash
 docker-compose up -d --build

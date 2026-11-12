@@ -36,7 +36,9 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
       const me = await api.get<MeResponse>('/auth/me');
       onLoginSuccess(me);
     } catch (err) {
-      if (err instanceof ApiError && err.status < 500) setError(INVALID_CREDENTIALS);
+      // 429: serwer zablokował logowanie po zbyt wielu nieudanych próbach — komunikat mówi, na ile minut
+      if (err instanceof ApiError && err.status === 429) setError(err.message);
+      else if (err instanceof ApiError && err.status < 500) setError(INVALID_CREDENTIALS);
       else if (err instanceof ApiError) setError('Serwer chwilowo nie odpowiada. Spróbuj ponownie za chwilę.');
       else setError('Brak połączenia z serwerem. Sprawdź sieć i spróbuj ponownie.');
     } finally {

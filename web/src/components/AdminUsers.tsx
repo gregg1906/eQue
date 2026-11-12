@@ -190,6 +190,15 @@ const AdminUsers = forwardRef<RefreshHandle, {
       setEditOpen(false);
       showToast(`Usunięto użytkownika: ${editUser.full_name}.`);
     } catch (err) {
+      // 409: konto obsłużyło bilety — usunięcie wymazałoby z historii, kto je obsłużył
+      if (err instanceof ApiError && err.status === 409 && editUser.is_active) {
+        const deactivate = await confirmDialog(
+          `${err.message} Po dezaktywacji „${editUser.full_name}” nie zaloguje się, a historia biletów zostanie bez zmian.`,
+          { title: 'Nie można usunąć konta', tone: 'danger', confirmLabel: 'Dezaktywuj konto' }
+        );
+        if (deactivate) await setActive(false);
+        return;
+      }
       showToast(errorMessage(err, 'Nie udało się usunąć użytkownika'), { tone: 'error' });
     }
   };
@@ -203,6 +212,11 @@ const AdminUsers = forwardRef<RefreshHandle, {
       );
       if (!ok) return;
     }
+    await setActive(next);
+  };
+
+  const setActive = async (next: boolean) => {
+    if (!editUser) return;
     try {
       const updated = await api.post<UserResponse>(`/admin/users/${editUser.id}/${next ? 'activate' : 'deactivate'}`);
       setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
@@ -426,7 +440,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
 
             <div className="drawer-section">
               <h3 className="drawer-section-title">Usuń użytkownika</h3>
-              <p className="drawer-section-text">Usuwa konto na stałe. Tego nie da się cofnąć, więc zapytamy jeszcze raz.</p>
+              <p className="drawer-section-text">Usuwa konto na stałe. Tego nie da się cofnąć, więc zapytamy jeszcze raz. Konta, które obsłużyło bilety, nie da się usunąć — można je tylko dezaktywować, żeby historia zachowała, kto obsłużył.</p>
               <Button variant="danger" size="sm" className="self-start" onClick={handleDelete}>Usuń użytkownika</Button>
             </div>
             <button type="submit" hidden />
