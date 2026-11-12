@@ -266,3 +266,31 @@ h1, h2, h3, h4 { font-family: var(--font-display); color: var(--text-strong); le
     scroll-behavior: auto !important;
   }
 }
+
+/*
+  ——— Ustawienia dostępności z konta użytkownika (Ustawienia → Wygląd i czytelność) ———
+  Atrybuty data-* na <html> ustawia App.tsx (applyPreferencesToDocument) i skrypt w index.html.
+  Rozmiar tekstu skaluje rem, więc rośnie cała typografia i odstępy z Tailwinda — jak powiększenie
+  w przeglądarce, ale zapisane na koncie i bez poziomego przewijania.
+*/
+:root[data-text-size="large"]  { font-size: 112.5%; } /* 18 px */
+:root[data-text-size="xlarge"] { font-size: 125%; }   /* 20 px */
+
+/* Wysoki kontrast: ciemniejszy tekst pomocniczy, wyraźne obramowania i grubszy obrys fokusu (oba motywy). */
+:root[data-contrast="high"] {
+  --text-body:  var(--slate-900);
+  --text-muted: var(--slate-700);
+  --text-faint: var(--slate-600);
+  --border-subtle:  var(--slate-500);
+  --border-default: var(--slate-700);
+}
+:root[data-contrast="high"] :focus-visible { outline-width: 3px; outline-offset: 3px; }
+
+/* Ograniczony ruch wybrany w ustawieniach — to samo co @media (prefers-reduced-motion) wyżej. */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}

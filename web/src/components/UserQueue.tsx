@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHand
 import { api } from '../lib/api';
 import { ws, type WsMessage } from '../lib/ws';
 import { sortByName } from '../lib/sort';
-import type { LocationResponse, QueueResponse, RefreshHandle, TicketResponse } from '../lib/apiTypes';
-import { getActivity } from '../lib/ticketActivity';
+import type { LocationResponse, QueueResponse, RefreshHandle, TicketHistoryEntry, TicketResponse } from '../lib/apiTypes';
+import { usePreferences } from '../lib/preferences';
+import { outcomeOf, useShiftHistory } from '../lib/useShiftHistory';
 import { formatTime, minutesSince, LONG_WAIT_MIN } from '../lib/time';
 import { useTick } from '../lib/useTick';
 import { useHotkeys } from '../lib/useHotkeys';
 import { onQueueCommand } from '../lib/commands';
-import { useQueueActions, applyQueueActions, applyLocationActions, type QueueAction } from '../lib/useQueueActions';
+import { useQueueActions, applyQueueActions, applyLocationActions, type Entry, type QueueAction } from '../lib/useQueueActions';
 import Button from './ui/Button';
 import Segmented from './ui/Segmented';
 import Switch from './ui/Switch';
@@ -22,12 +23,14 @@ function joinedLine(ticket: TicketResponse) {
   return `${formatTime(ticket.joined_at)}${ticket.appointment_time ? `, wizyta ${ticket.appointment_time}` : ''}`;
 }
 
-function ServingPanel({ location, queue, onDone, onNoShow, onCallFirst }: {
+function ServingPanel({ location, queue, onDone, onNoShow, onCallFirst, shortcuts }: {
   location: LocationResponse;
   queue: QueueResponse;
   onDone: () => void;
   onNoShow: () => void;
   onCallFirst: () => void;
+  /** Czy pokazywać skróty jednoklawiszowe (można je wyłączyć w Ustawieniach). */
+  shortcuts: boolean;
 }) {
   const serving = queue.serving;
   const next = queue.waiting[0];
@@ -52,10 +55,10 @@ function ServingPanel({ location, queue, onDone, onNoShow, onCallFirst }: {
           <span>Dołączono o {joinedLine(serving)}</span>
         </div>
         <div className="serving-actions">
-          <Button variant="primary" size="lg" icon="check" kbd="Enter" onClick={onDone}>
+          <Button variant="primary" size="lg" icon="check" kbd={shortcuts ? 'Enter' : undefined} onClick={onDone}>
             {next ? 'Obsłużono, wezwij następnego' : 'Obsłużono'}
           </Button>
-          <Button variant="secondary" size="lg" icon="x" kbd="N" onClick={onNoShow}>
+          <Button variant="secondary" size="lg" icon="x" kbd={shortcuts ? 'N' : undefined} onClick={onNoShow}>
             Nie zgłosił się
           </Button>
         </div>
@@ -80,7 +83,7 @@ function ServingPanel({ location, queue, onDone, onNoShow, onCallFirst }: {
       </div>
       {next && (
         <div className="serving-actions">
-          <Button variant="primary" size="lg" icon="bell" kbd="Enter" onClick={onCallFirst}>
+          <Button variant="primary" size="lg" icon="bell" kbd={shortcuts ? 'Enter' : undefined} onClick={onCallFirst}>
             Wezwij {next.ticket_code}
           </Button>
         </div>
@@ -89,12 +92,45 @@ function ServingPanel({ location, queue, onDone, onNoShow, onCallFirst }: {
   );
 }
 
-const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLocationId?: number | null }>(function UserQueue({ locationIds, initialLocationId = null }, ref) {
+const OUTCOME_PILL = {
+  served: { tone: 'served', label: 'Obsłużono' },
+  noshow: { tone: 'skipped', label: 'Nie zgłosił się' },
+  patient: { tone: 'neutral', label: 'Rezygnacja klienta' },
+  staff: { tone: 'neutral', label: 'Anulowano' },
+} as const;
+
+/** Akcje „zakończ” czekające jeszcze w oknie „Cofnij” — widoczne na liście, zanim dotrą do serwera. */
+function pendingFinished(entries: Entry[], currentUserId: string): TicketHistoryEntry[] {
+  const out: TicketHistoryEntry[] = [];
+  for (const e of entries) {
+    if (e.action.kind !== 'resolve') continue;
+    const done = e.action.outcome === 'done';
+    out.push({
+      ...e.action.ticket,
+      status: done ? 'COMPLETED' : 'CANCELLED',
+      close_reason: done ? null : 'NO_SHOW',
+      served_at: e.at,
+      served_by_user_id: currentUserId,
+      served_by_name: null,
+    });
+  }
+  return out.reverse(); // najnowsze najpierw, jak w historii z serwera
+}
+
+const UserQueue = forwardRef<RefreshHandle, {
+  locationIds: number[];
+  currentUserId: string;
+  initialLocationId?: number | null;
+}>(function UserQueue({ locationIds, currentUserId, initialLocationId = null }, ref) {
   const [allLocations, setAllLocations] = useState<LocationResponse[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [queues, setQueues] = useState<Record<number, QueueResponse>>({});
   const [chosenId, setChosenId] = useState<number | null>(initialLocationId);
   const [list, setList] = useState<'wait' | 'done'>('wait');
+  /** Komunikat dla czytnika ekranu o nowej osobie w wybranej kolejce. */
+  const [arrival, setArrival] = useState<{ locationId: number; text: string } | null>(null);
+  const prefs = usePreferences();
+  const { entries: history, refetch: refetchHistory } = useShiftHistory();
   useTick(30000);
 
   const fetchLocations = useCallback(async (): Promise<LocationResponse[] | null> => {
@@ -136,8 +172,8 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
 
   const refetch = useCallback(async () => {
     const locs = await fetchLocations();
-    if (locs) await Promise.all(locs.filter(l => l.is_active).map(l => fetchQueue(l.id)));
-  }, [fetchLocations, fetchQueue]);
+    if (locs) await Promise.all([...locs.filter(l => l.is_active).map(l => fetchQueue(l.id)), refetchHistory()]);
+  }, [fetchLocations, fetchQueue, refetchHistory]);
 
   useImperativeHandle(ref, () => ({ refetch }), [refetch]);
 
@@ -147,7 +183,16 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
       const locId = (msg.ticket as { location_id?: number } | undefined)?.location_id;
       if (typeof locId === 'number' && ids.includes(locId)) fetchQueue(locId);
     };
-    const offCreated = ws.on('ticket.created', handler);
+    const offCreated = ws.on('ticket.created', msg => {
+      handler(msg);
+      const ticket = msg.ticket as TicketResponse | undefined;
+      if (ticket && ids.includes(ticket.location_id)) {
+        setArrival({
+          locationId: ticket.location_id,
+          text: `Do kolejki dołączył bilet ${ticket.ticket_code}${ticket.customer_name ? `, ${ticket.customer_name}` : ''}.`,
+        });
+      }
+    });
     const offUpdated = ws.on('ticket.updated', handler);
     const offLocUpdated = ws.on('location.updated', msg => {
       const location = msg.location as LocationResponse;
@@ -162,12 +207,15 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
       if (updated?.id) setAllLocations(prev => prev.map(l => l.id === updated.id ? updated : l));
       else await fetchLocations();
     } else {
-      await fetchQueue(action.locationId);
+      // historia razem z kolejką — inaczej zakończony bilet na chwilę znika z listy „Zakończone”
+      await Promise.all([fetchQueue(action.locationId), action.kind === 'resolve' ? refetchHistory() : undefined]);
     }
   };
   const { entries, perform } = useQueueActions(afterSend);
 
-  const selectedId = chosenId !== null && available.some(l => l.id === chosenId) ? chosenId : available[0]?.id ?? null;
+  // wybór operatora > domyślna lokalizacja z Ustawień > pierwsza alfabetycznie
+  const preferredId = chosenId ?? prefs.default_location_id;
+  const selectedId = preferredId !== null && available.some(l => l.id === preferredId) ? preferredId : available[0]?.id ?? null;
   const rawLocation = available.find(l => l.id === selectedId) ?? null;
   const location = rawLocation ? applyLocationActions(rawLocation, entries) : null;
   const rawQueue = selectedId !== null ? queues[selectedId] : undefined;
@@ -210,7 +258,8 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
     setList('wait');
   };
 
-  useHotkeys({ Enter: primary, n: () => resolve('noshow'), p: togglePause }, !!location && !!queue);
+  const shortcuts = prefs.single_key_shortcuts;
+  useHotkeys({ Enter: primary, n: () => resolve('noshow'), p: togglePause }, !!location && !!queue && shortcuts);
 
   const commandsRef = useRef({ primary, noshow: () => resolve('noshow'), togglePause, selectLocation });
   useEffect(() => { commandsRef.current = { primary, noshow: () => resolve('noshow'), togglePause, selectLocation }; });
@@ -222,13 +271,16 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
     else if (cmd.type === 'select') c.selectLocation(cmd.locationId);
   }), []);
 
-  const activity = getActivity();
-  const myActivity = activity.filter(a => locationIds.includes(a.locationId));
-  const done = myActivity.filter(a => a.outcome === 'done').length;
-  const noShow = myActivity.length - done;
+  // Dzisiejsza historia z serwera + akcje jeszcze w oknie „Cofnij”
+  const pending = pendingFinished(entries, currentUserId);
+  const pendingIds = new Set(pending.map(p => p.id));
+  const finished = [...pending, ...(history ?? []).filter(h => !pendingIds.has(h.id))];
+  const mine = finished.filter(e => e.served_by_user_id === currentUserId && outcomeOf(e) !== 'patient');
+  const done = mine.filter(e => outcomeOf(e) === 'served').length;
+  const noShow = mine.filter(e => outcomeOf(e) === 'noshow').length;
   const openNow = displayQueues.reduce((sum, q) => sum + (q ? q.waiting.length + (q.serving ? 1 : 0) : 0), 0);
-  const totalShift = myActivity.length + openNow;
-  const finishedHere = selectedId !== null ? activity.filter(a => a.locationId === selectedId) : [];
+  const totalShift = mine.length + openNow;
+  const finishedHere = selectedId !== null ? finished.filter(e => e.location_id === selectedId) : [];
 
   if (!loaded) {
     return <p className="muted" role="status">Wczytywanie kolejki…</p>;
@@ -270,8 +322,9 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
             <span className="sr-only" aria-live="polite">
               {queue?.serving ? `Teraz obsługiwany ${queue.serving.ticket_code}` : 'Nikt nie jest obsługiwany'}
             </span>
+            <span className="sr-only" aria-live="polite">{arrival?.locationId === selectedId ? arrival.text : ''}</span>
             {queue
-              ? <ServingPanel location={location} queue={queue} onDone={() => resolve('done')} onNoShow={() => resolve('noshow')} onCallFirst={primary} />
+              ? <ServingPanel location={location} queue={queue} onDone={() => resolve('done')} onNoShow={() => resolve('noshow')} onCallFirst={primary} shortcuts={shortcuts} />
               : <div className="card card-pad muted" role="status">Wczytywanie kolejki…</div>}
 
             <div className="qlist-head">
@@ -326,25 +379,30 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
               <div className="card">
                 <EmptyState
                   title="Nic jeszcze nie zakończono"
-                  text="Tu zobaczysz osoby obsłużone podczas tej zmiany. Historia jest zapisywana tylko w tej przeglądarce i znika po jej zamknięciu."
+                  text="Tu zobaczysz bilety zakończone dzisiaj w tej lokalizacji — przez Ciebie i innych operatorów. Historia jest zapisana na serwerze, więc nie znika po odświeżeniu strony."
                 />
               </div>
             ) : (
               <ol className="qlist" aria-label="Zakończone">
-                {finishedHere.map(entry => (
-                  <li key={entry.ticketId}>
-                    <span className="qpos" />
-                    <TicketCode code={entry.ticketCode} state="done" />
-                    <div className="qname">
-                      <b>{entry.customerName || 'Bez nazwiska'}</b>
-                      <span>Zakończono o {formatTime(entry.resolvedAt)}</span>
-                    </div>
-                    <span className="qlist-spacer" />
-                    <StatusPill tone={entry.outcome === 'done' ? 'served' : 'skipped'}>
-                      {entry.outcome === 'done' ? 'Obsłużono' : 'Nie zgłosił się'}
-                    </StatusPill>
-                  </li>
-                ))}
+                {finishedHere.map(entry => {
+                  const pill = OUTCOME_PILL[outcomeOf(entry)];
+                  const byOther = entry.served_by_user_id && entry.served_by_user_id !== currentUserId;
+                  return (
+                    <li key={entry.id}>
+                      <span className="qpos" />
+                      <TicketCode code={entry.ticket_code} state="done" />
+                      <div className="qname">
+                        <b>{entry.customer_name || 'Bez nazwiska'}</b>
+                        <span>
+                          Zakończono o {entry.served_at ? formatTime(entry.served_at) : '–'}
+                          {byOther && ` · ${entry.served_by_name ?? 'inny operator'}`}
+                        </span>
+                      </div>
+                      <span className="qlist-spacer" />
+                      <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </div>
@@ -369,17 +427,20 @@ const UserQueue = forwardRef<RefreshHandle, { locationIds: number[]; initialLoca
                 <div><strong>{noShow}</strong><span>Nie zgłosiło się</span></div>
               </div>
               <div className="meter" aria-hidden="true">
-                <i style={{ clipPath: `inset(0 ${100 - (totalShift ? Math.round((myActivity.length / totalShift) * 100) : 0)}% 0 0 round 999px)` }} />
+                <i style={{ clipPath: `inset(0 ${100 - (totalShift ? Math.round((mine.length / totalShift) * 100) : 0)}% 0 0 round 999px)` }} />
               </div>
-              <p className="meter-cap">Zakończono <b>{myActivity.length}</b> z <b>{totalShift}</b> zgłoszeń w tej zmianie</p>
+              <p className="meter-cap">Zakończono <b>{mine.length}</b> z <b>{totalShift}</b> zgłoszeń dzisiaj</p>
             </div>
 
             <div className="card side-card">
               <h2 className="side-card-title">Skróty</h2>
+              {!shortcuts && <p>Skróty jednoklawiszowe są wyłączone w Ustawieniach. Wyszukiwanie działa dalej:</p>}
               <dl className="shortcuts">
-                <div><dt>Obsłużono, wezwij następnego</dt><dd><Kbd keys="Enter" /></dd></div>
-                <div><dt>Nie zgłosił się</dt><dd><Kbd keys="N" /></dd></div>
-                <div><dt>Wstrzymaj lub wznów zapisy</dt><dd><Kbd keys="P" /></dd></div>
+                {shortcuts && <>
+                  <div><dt>Obsłużono, wezwij następnego</dt><dd><Kbd keys="Enter" /></dd></div>
+                  <div><dt>Nie zgłosił się</dt><dd><Kbd keys="N" /></dd></div>
+                  <div><dt>Wstrzymaj lub wznów zapisy</dt><dd><Kbd keys="P" /></dd></div>
+                </>}
                 <div><dt>Szukaj i przejdź</dt><dd><Kbd keys={['Ctrl', 'K']} /></dd></div>
               </dl>
             </div>

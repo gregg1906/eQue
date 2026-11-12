@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ApiError, errorDetail, getToken, notifyUnauthorized } from './api';
 import type { LocationResponse, QueueResponse, TicketResponse } from './apiTypes';
-import { recordResolved, removeResolved } from './ticketActivity';
+import { getPreferences } from './preferences';
 import { nowIso } from './time';
-import { dismissToast, showToast, UNDO_WINDOW_MS } from '../components/ui/useToast';
+import { dismissToast, showToast } from '../components/ui/useToast';
 
 /*
   „Cofnij” bez endpointu cofania (backend ma tylko call / complete / cancel / pause-queue / resume-queue):
-  1. akcja od razu zmienia UI (nakładka na stan z serwera) i pokazuje powiadomienie z „Cofnij” na 6 s,
-  2. żądanie idzie dopiero po 6 s albo od razu, gdy operator wykona kolejną akcję (najpierw oczekująca),
+  1. akcja od razu zmienia UI (nakładka na stan z serwera) i pokazuje powiadomienie z „Cofnij”
+     na 6, 10 albo 20 s — długość okna wybiera użytkownik w Ustawieniach (WCAG 2.2.1),
+  2. żądanie idzie dopiero po upływie okna albo od razu, gdy operator wykona kolejną akcję (najpierw oczekująca),
   3. „Cofnij” = clearTimeout + zdjęcie nakładki,
   4. pagehide / visibilitychange: hidden / odmontowanie ekranu → wysyłka od razu (fetch z keepalive),
   5. błąd API → zdjęcie nakładki i powiadomienie z opisem z ApiError.
@@ -22,7 +23,7 @@ export type QueueAction =
   | { kind: 'call'; locationId: number; ticket: TicketResponse }
   | { kind: 'accepting'; locationId: number; locationName: string; accepting: boolean };
 
-interface Entry {
+export interface Entry {
   id: number;
   action: QueueAction;
   at: string;
@@ -37,7 +38,7 @@ type AfterSend = (action: QueueAction, result: unknown) => Promise<void> | void;
 function stepsFor(action: QueueAction): string[] {
   switch (action.kind) {
     case 'resolve': {
-      const steps = [`/admin/tickets/${action.ticket.id}/${action.outcome === 'done' ? 'complete' : 'cancel'}`];
+      const steps = [`/admin/tickets/${action.ticket.id}/${action.outcome === 'done' ? 'complete' : 'cancel?reason=NO_SHOW'}`];
       if (action.next) steps.push(`/admin/tickets/${action.next.id}/call`);
       return steps;
     }
@@ -109,19 +110,10 @@ class QueueActionController {
     this.flushAll('sequential');
     const id = ++this.seq;
     const at = nowIso();
-    if (action.kind === 'resolve') {
-      recordResolved({
-        ticketId: action.ticket.id,
-        ticketCode: action.ticket.ticket_code,
-        customerName: action.ticket.customer_name,
-        locationId: action.locationId,
-        outcome: action.outcome,
-        resolvedAt: at,
-      });
-    }
+    const windowMs = getPreferences().undo_seconds * 1000;
     this.set([...this.entries, { id, action, at, status: 'pending', token: getToken() }]);
-    this.timers.set(id, setTimeout(() => this.flush(id, 'sequential'), UNDO_WINDOW_MS));
-    this.toastIds.set(id, showToast(text, { undo: () => this.undo(id) }));
+    this.timers.set(id, setTimeout(() => this.flush(id, 'sequential'), windowMs));
+    this.toastIds.set(id, showToast(text, { undo: () => this.undo(id), duration: windowMs }));
   };
 
   undo = (id: number) => {
@@ -129,7 +121,6 @@ class QueueActionController {
     if (!entry || entry.status !== 'pending') return;
     this.clearTimer(id);
     this.toastIds.delete(id);
-    if (entry.action.kind === 'resolve') removeResolved(entry.action.ticket.id);
     this.set(this.entries.filter(e => e.id !== id));
     showToast(undoMessage(entry.action));
   };
@@ -180,7 +171,6 @@ class QueueActionController {
     }
 
     if (error !== null) {
-      if (entry.action.kind === 'resolve' && !succeeded[0]) removeResolved(entry.action.ticket.id);
       showToast(failureMessage(entry.action, succeeded, error), { tone: 'error' });
       result = undefined;
     }

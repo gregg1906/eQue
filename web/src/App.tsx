@@ -22,7 +22,10 @@ import { DialogHost } from './lib/dialogs';
 import { startSessionKeeper } from './lib/session';
 import { runQueueCommand } from './lib/commands';
 import { sortByName } from './lib/sort';
-import { readThemePreference, saveThemePreference, systemPrefersDark, type ThemePreference } from './lib/theme';
+import { systemPrefersDark, type ThemePreference } from './lib/theme';
+import { applyPreferencesToDocument, loadPreferences, updatePreferences, usePreferences } from './lib/preferences';
+import { useNewTicketSound } from './lib/sound';
+import { showToast } from './components/ui/useToast';
 import { useWaitingTotal } from './lib/useWaitingTotal';
 import type { LocationResponse, MeResponse, RefreshHandle } from './lib/apiTypes';
 
@@ -86,9 +89,9 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const contentRef = useRef<RefreshHandle | null>(null);
 
-  const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
+  // Ustawienia z konta (motyw, rozmiar tekstu, kontrast, ruch…) — patrz lib/preferences.ts
+  const prefs = usePreferences();
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
-  const resolvedTheme = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
 
   useEffect(() => {
     const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
@@ -99,9 +102,14 @@ export default function App() {
   }, []);
 
   useLayoutEffect(() => {
-    document.documentElement.setAttribute('data-theme', resolvedTheme);
-    saveThemePreference(theme);
-  }, [theme, resolvedTheme]);
+    applyPreferencesToDocument(prefs, systemDark);
+  }, [prefs, systemDark]);
+
+  const setTheme = useCallback((theme: ThemePreference) => {
+    updatePreferences({ theme }).catch(() => {
+      showToast('Nie udało się zapisać motywu na koncie. Sprawdź połączenie i spróbuj ponownie.', { tone: 'error' });
+    });
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -143,6 +151,8 @@ export default function App() {
     setUnauthorizedHandler(expire);
     const offWsAuth = ws.onAuthFailure(expire);
     const stopKeeper = startSessionKeeper({ onExpired: expire, onLogout: () => endSession(null) });
+    // ustawienia z konta — kopia lokalna wystarczy do pierwszego malowania, serwer jest źródłem prawdy
+    loadPreferences().catch(() => { /* zostają ostatnio znane ustawienia */ });
     return () => { setUnauthorizedHandler(null); offWsAuth(); stopKeeper(); };
   }, [session, endSession]);
 
@@ -178,6 +188,7 @@ export default function App() {
   }, [paletteOpen, session]);
 
   const waitingCount = useWaitingTotal(session?.locationIds ?? NO_LOCATIONS, session?.role === 'user');
+  useNewTicketSound(session?.locationIds ?? NO_LOCATIONS, session?.role === 'user');
 
   const clearIntent = useCallback(() => setIntent(null), []);
   const closeAdd = useCallback(() => setAddOpen(false), []);
@@ -263,13 +274,13 @@ export default function App() {
       : activeTab === 'tablety'     ? <AdminDashboard ref={contentRef} addOpen={addOpen} onAddOpen={openAdd} onAddClose={closeAdd} editId={intentId('tablety')} onEditHandled={clearIntent} />
       : activeTab === 'lokalizacje' ? <AdminLocations ref={contentRef} addOpen={addOpen} onAddOpen={openAdd} onAddClose={closeAdd} editId={intentId('lokalizacje')} onEditHandled={clearIntent} />
       : activeTab === 'uzytkownicy' ? <AdminUsers ref={contentRef} addOpen={addOpen} onAddOpen={openAdd} onAddClose={closeAdd} currentUserId={currentUserId} />
-      : activeTab === 'ustawienia'  ? <AdminSettings theme={theme} onThemeChange={setTheme} />
+      : activeTab === 'ustawienia'  ? <AdminSettings isOperator={false} />
       : null;
   } else {
     content =
-      activeTab === 'strona_glowna' ? <UserHome ref={contentRef} locationIds={locationIds} onOpenQueue={openQueue} />
-      : activeTab === 'kolejka'     ? <UserQueue ref={contentRef} locationIds={locationIds} initialLocationId={intentId('kolejka')} />
-      : activeTab === 'ustawienia'  ? <AdminSettings theme={theme} onThemeChange={setTheme} />
+      activeTab === 'strona_glowna' ? <UserHome ref={contentRef} locationIds={locationIds} currentUserId={currentUserId} onOpenQueue={openQueue} />
+      : activeTab === 'kolejka'     ? <UserQueue ref={contentRef} locationIds={locationIds} currentUserId={currentUserId} initialLocationId={intentId('kolejka')} />
+      : activeTab === 'ustawienia'  ? <AdminSettings isOperator />
       : null;
   }
 

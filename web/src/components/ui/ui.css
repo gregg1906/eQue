@@ -165,6 +165,11 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 }
 .seg button:hover { color: var(--text-strong); }
 .seg button[aria-selected="true"] { background: var(--surface-card); color: var(--text-strong); box-shadow: var(--shadow-sm); }
+/* w ciemnym motywie karta jest ciemniejsza od toru przełącznika — zaznaczenie musi być jaśniejsze, żeby było widać wybór */
+:root[data-theme="dark"] .seg button[aria-selected="true"] { background: var(--slate-300); }
+/* wysoki kontrast: zaznaczenie nie opiera się tylko na odcieniu tła */
+:root[data-contrast="high"] .seg { box-shadow: inset 0 0 0 1px var(--border-default); }
+:root[data-contrast="high"] .seg button[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--text-strong); }
 .seg button:focus-visible { outline-offset: -2px; }
 .seg .seg-letter { font-family: var(--font-display); font-weight: 700; color: var(--text-brand); }
 .seg .seg-count { color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -342,3 +347,16 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
   .input-float:focus + .float-label,
   .input-float:not(:placeholder-shown) + .float-label { transition-property: color; }
 }
+
+/* ——— Ograniczony ruch z ustawień konta (lustro bloku @media powyżej) ——— */
+:root[data-motion="reduce"] .drawer { transform: none; opacity: 0; transition: opacity var(--dur-base) var(--ease-out), visibility 0s var(--dur-base); }
+:root[data-motion="reduce"] .drawer.is-open { opacity: 1; transition: opacity var(--dur-base) var(--ease-out); }
+:root[data-motion="reduce"] .dialog,
+:root[data-motion="reduce"] .dialog-scrim.is-visible .dialog { transform: none; }
+:root[data-motion="reduce"] .select-panel,
+:root[data-motion="reduce"] .select-panel.is-open { transform: none; }
+:root[data-motion="reduce"] .toast,
+:root[data-motion="reduce"] .toast[data-state="closing"] { transform: none; transition-property: opacity; }
+:root[data-motion="reduce"] .float-label,
+:root[data-motion="reduce"] .input-float:focus + .float-label,
+:root[data-motion="reduce"] .input-float:not(:placeholder-shown) + .float-label { transition-property: color; }

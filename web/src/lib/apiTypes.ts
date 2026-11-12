@@ -68,6 +68,31 @@ export interface TicketResponse {
   customer_name: string | null;
   appointment_time: string | null;
   served_by_user_id: string | null;
+  /** Tylko dla CANCELLED. Starsze bilety mogą mieć null. */
+  close_reason: CloseReason | null;
+}
+
+export type CloseReason = 'NO_SHOW' | 'PATIENT_CANCELLED' | 'STAFF_CANCELLED';
+
+/** Zakończony bilet z GET /admin/tickets/history. */
+export interface TicketHistoryEntry extends TicketResponse {
+  served_by_name: string | null;
+}
+
+export type ThemePreference = 'light' | 'dark' | 'system';
+export type TextSize = 'normal' | 'large' | 'xlarge';
+export type UndoSeconds = 6 | 10 | 20;
+
+/** Ustawienia panelu zapisane na koncie (GET/PUT /auth/me/preferences). */
+export interface UserPreferences {
+  theme: ThemePreference;
+  text_size: TextSize;
+  high_contrast: boolean;
+  reduce_motion: boolean;
+  undo_seconds: UndoSeconds;
+  sound_on_new_ticket: boolean;
+  default_location_id: number | null;
+  single_key_shortcuts: boolean;
 }
 
 export interface QueueResponse {

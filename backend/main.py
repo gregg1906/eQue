@@ -19,6 +19,7 @@ from auth import (
 from ws import manager as ws_manager, redis_pubsub_listener, publish_event, REDIS_CHANNEL
 
 from datetime import datetime, timezone
+from typing import Optional
 from schemas.api_schemas import (
     KioskStatusResponse, SignupCodeResponse, JoinQueueRequest, JoinQueueResponse, PatientCancelRequest,
     TicketStatusResponse,
@@ -26,8 +27,10 @@ from schemas.api_schemas import (
     LoginRequest, TokenResponse, MeResponse, ChangePasswordRequest,
     UserCreate, UserUpdate, UserResponse,
     LocationCreate, LocationUpdate, LocationResponse, TabletInLocation,
-    TicketResponse, QueueResponse,
+    TicketResponse, QueueResponse, TicketHistoryEntry,
+    UserPreferences, UserPreferencesUpdate, CloseReason,
 )
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +352,59 @@ async def refresh_token(current_user: models.User = Depends(get_current_user)):
         "role": current_user.role,
         "full_name": current_user.full_name,
     }
+
+
+def _read_preferences(user: models.User) -> UserPreferences:
+    """
+    Ustawienia z bazy uzupełnione wartościami domyślnymi. Pola nieznane (np. po zmianie
+    schematu) są pomijane, a niepoprawna wartość jednego pola nie psuje pozostałych.
+    """
+    stored = user.preferences or {}
+    known = {k: v for k, v in stored.items() if k in UserPreferences.model_fields}
+    try:
+        return UserPreferences.model_validate(known)
+    except ValidationError:
+        valid = {}
+        for key, value in known.items():
+            try:
+                UserPreferences.model_validate({key: value})
+                valid[key] = value
+            except ValidationError:
+                pass
+        return UserPreferences.model_validate(valid)
+
+
+@app.get("/api/v1/auth/me/preferences", response_model=UserPreferences, tags=["Auth"])
+async def get_my_preferences(current_user: models.User = Depends(get_current_user)):
+    """Ustawienia panelu zapisane na koncie zalogowanego użytkownika."""
+    return _read_preferences(current_user)
+
+
+@app.put("/api/v1/auth/me/preferences", response_model=UserPreferences, tags=["Auth"])
+async def update_my_preferences(
+    data: UserPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Zmienia tylko przesłane pola (np. `{"theme": "dark"}`) i zwraca komplet ustawień.
+    `default_location_id` musi być lokalizacją, do której użytkownik ma dostęp (albo null).
+    """
+    patch = data.model_dump(exclude_unset=True)
+    for key in ("theme", "text_size", "high_contrast", "reduce_motion", "undo_seconds",
+                "sound_on_new_ticket", "single_key_shortcuts"):
+        if key in patch and patch[key] is None:
+            raise HTTPException(status_code=422, detail=f"Pole '{key}' nie może być puste")
+
+    if patch.get("default_location_id") is not None:
+        loc_id = patch["default_location_id"]
+        _get_location_or_404(loc_id, db)
+        ensure_location_access(current_user, loc_id)
+
+    merged = UserPreferences.model_validate({**_read_preferences(current_user).model_dump(), **patch})
+    current_user.preferences = merged.model_dump()
+    db.commit()
+    return merged
 
 
 @app.get("/api/v1/auth/me", response_model=MeResponse, tags=["Auth"])
@@ -792,6 +848,7 @@ def _ticket_to_response(ticket: models.Ticket) -> TicketResponse:
         customer_name=ticket.customer_name,
         appointment_time=ticket.appointment_time,
         served_by_user_id=str(ticket.served_by_user_id) if ticket.served_by_user_id else None,
+        close_reason=ticket.close_reason,
     )
 
 
@@ -927,6 +984,7 @@ async def patient_cancel_ticket(
         )
 
     ticket.status = "CANCELLED"
+    ticket.close_reason = "PATIENT_CANCELLED"
     ticket.served_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(ticket)
@@ -1669,6 +1727,55 @@ async def get_location_queue(
     )
 
 
+@app.get(
+    "/api/v1/admin/tickets/history",
+    response_model=list[TicketHistoryEntry],
+    tags=["Admin — Queue"],
+)
+async def get_ticket_history(
+    since: datetime = Query(..., description="Początek okresu (ISO 8601), np. lokalna północ wysłana przez panel"),
+    location_id: Optional[int] = Query(default=None, description="Tylko ta lokalizacja"),
+    mine: bool = Query(default=False, description="Tylko bilety obsłużone przez zalogowanego"),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Zakończone bilety (COMPLETED / CANCELLED) od `since`, najnowsze najpierw — źródło
+    listy „Zakończone” i licznika „Twoja zmiana”. Historia jest w bazie, więc przetrwa
+    odświeżenie strony i jest taka sama na każdym komputerze.
+
+    Początek dnia podaje panel, bo tylko przeglądarka zna strefę czasową placówki.
+    Operator widzi tylko swoje lokalizacje, administrator wszystkie.
+    """
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+
+    query = db.query(models.Ticket).filter(
+        models.Ticket.status.in_(("COMPLETED", "CANCELLED")),
+        models.Ticket.served_at >= since,
+    )
+    if location_id is not None:
+        ensure_location_access(current_user, location_id)
+        query = query.filter(models.Ticket.location_id == location_id)
+    elif current_user.role != ROLE_ADMIN:
+        own_ids = [loc.id for loc in current_user.locations]
+        if not own_ids:
+            return []
+        query = query.filter(models.Ticket.location_id.in_(own_ids))
+    if mine:
+        query = query.filter(models.Ticket.served_by_user_id == current_user.id)
+
+    tickets = query.order_by(models.Ticket.served_at.desc()).limit(limit).all()
+    return [
+        TicketHistoryEntry(
+            **_ticket_to_response(t).model_dump(),
+            served_by_name=t.served_by_user.full_name if t.served_by_user else None,
+        )
+        for t in tickets
+    ]
+
+
 @app.post(
     "/api/v1/admin/tickets/{ticket_id}/call",
     response_model=TicketResponse,
@@ -1768,6 +1875,10 @@ async def complete_ticket(
 async def cancel_ticket(
     ticket_id: str,
     request: Request,
+    reason: Optional[CloseReason] = Query(
+        default=None,
+        description="NO_SHOW (nie zgłosił się) albo STAFF_CANCELLED. Domyślnie: NO_SHOW dla wezwanego biletu, STAFF_CANCELLED dla czekającego.",
+    ),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -1784,6 +1895,9 @@ async def cancel_ticket(
             status_code=409,
             detail=f"Bilet jest już w stanie końcowym: '{ticket.status}'",
         )
+    if reason == "PATIENT_CANCELLED":
+        raise HTTPException(status_code=422, detail="PATIENT_CANCELLED ustawia tylko pacjent (POST /queue/cancel)")
+    ticket.close_reason = reason or ("NO_SHOW" if ticket.status == "SERVING" else "STAFF_CANCELLED")
     ticket.status = "CANCELLED"
     ticket.served_at = datetime.now(timezone.utc)
     db.commit()

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Literal, Optional
 import uuid
 
 
@@ -74,8 +74,14 @@ class TicketResponse(BaseModel):
     customer_name: Optional[str] = None
     appointment_time: Optional[str] = None
     served_by_user_id: Optional[str] = None
+    close_reason: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TicketHistoryEntry(TicketResponse):
+    """Zakończony bilet w historii zmiany — z imieniem osoby, która go obsłużyła."""
+    served_by_name: Optional[str] = None
 
 class QueueResponse(BaseModel):
     """Odpowiedź GET /admin/locations/{id}/queue."""
@@ -205,3 +211,38 @@ class UserResponse(BaseModel):
     online: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+CloseReason = Literal["NO_SHOW", "PATIENT_CANCELLED", "STAFF_CANCELLED"]
+
+
+class UserPreferences(BaseModel):
+    """
+    Ustawienia panelu zapisane na koncie użytkownika (kolumna users.preferences),
+    dzięki czemu działają na każdym komputerze, a nie tylko w jednej przeglądarce.
+    Wartości domyślne = zachowanie panelu sprzed wprowadzenia ustawień.
+    """
+    theme: Literal["light", "dark", "system"] = "light"
+    text_size: Literal["normal", "large", "xlarge"] = "normal"
+    high_contrast: bool = False
+    reduce_motion: bool = False
+    # WCAG 2.2.1 — użytkownik może wydłużyć czas na „Cofnij”
+    undo_seconds: Literal[6, 10, 20] = 6
+    sound_on_new_ticket: bool = False
+    default_location_id: Optional[int] = None
+    # WCAG 2.1.4 — skróty jednoklawiszowe muszą dać się wyłączyć
+    single_key_shortcuts: bool = True
+
+
+class UserPreferencesUpdate(BaseModel):
+    """Body PUT /auth/me/preferences — zmienia tylko przesłane pola."""
+    theme: Optional[Literal["light", "dark", "system"]] = None
+    text_size: Optional[Literal["normal", "large", "xlarge"]] = None
+    high_contrast: Optional[bool] = None
+    reduce_motion: Optional[bool] = None
+    undo_seconds: Optional[Literal[6, 10, 20]] = None
+    sound_on_new_ticket: Optional[bool] = None
+    default_location_id: Optional[int] = None
+    single_key_shortcuts: Optional[bool] = None
+
+    model_config = ConfigDict(extra="forbid")

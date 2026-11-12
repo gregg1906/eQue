@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, ForeignKey, DateTime, Boolean, Table, Column
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
@@ -25,6 +26,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Ustawienia panelu zapisane na koncie (schemat: schemas.api_schemas.UserPreferences).
+    preferences: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
 
     locations: Mapped[list["Location"]] = relationship(
         secondary=user_locations, back_populates="users"
@@ -82,6 +85,8 @@ class Ticket(Base):
 
     customer_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     appointment_time: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Tylko dla status=CANCELLED: NO_SHOW / PATIENT_CANCELLED / STAFF_CANCELLED.
+    close_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     served_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True

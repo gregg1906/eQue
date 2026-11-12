@@ -6,7 +6,7 @@ import { plural } from '../lib/plural';
 import { minutesSince, LONG_WAIT_MIN } from '../lib/time';
 import { useTick } from '../lib/useTick';
 import type { LocationResponse, QueueResponse, RefreshHandle } from '../lib/apiTypes';
-import { getActivity } from '../lib/ticketActivity';
+import { outcomeOf, useShiftHistory } from '../lib/useShiftHistory';
 import Button from './ui/Button';
 import Icon from './ui/Icon';
 import QueueLetter from './ui/QueueLetter';
@@ -14,10 +14,15 @@ import TicketCode from './ui/TicketCode';
 import StatusPill from './ui/StatusPill';
 import EmptyState from './ui/EmptyState';
 
-const UserHome = forwardRef<RefreshHandle, { locationIds: number[]; onOpenQueue: (locationId?: number) => void }>(function UserHome({ locationIds, onOpenQueue }, ref) {
+const UserHome = forwardRef<RefreshHandle, {
+  locationIds: number[];
+  currentUserId: string;
+  onOpenQueue: (locationId?: number) => void;
+}>(function UserHome({ locationIds, currentUserId, onOpenQueue }, ref) {
   const [myLocations, setMyLocations] = useState<LocationResponse[]>([]);
   const [queues, setQueues] = useState<Record<number, QueueResponse>>({});
   const [loaded, setLoaded] = useState(false);
+  const { entries: history, refetch: refetchHistory } = useShiftHistory();
   useTick(30000);
 
   const refetch = useCallback(async () => {
@@ -37,7 +42,9 @@ const UserHome = forwardRef<RefreshHandle, { locationIds: number[]; onOpenQueue:
     }
   }, [locationIds]);
 
-  useImperativeHandle(ref, () => ({ refetch }), [refetch]);
+  useImperativeHandle(ref, () => ({
+    refetch: async () => { await Promise.all([refetch(), refetchHistory()]); },
+  }), [refetch, refetchHistory]);
 
   useEffect(() => {
     const initial = setTimeout(refetch, 0);
@@ -76,9 +83,10 @@ const UserHome = forwardRef<RefreshHandle, { locationIds: number[]; onOpenQueue:
   const sortedLocations = [...active, ...sortByName(myLocations.filter(l => !l.is_active), l => l.name)];
   const waitingTotal = active.reduce((sum, l) => sum + (queues[l.id]?.waiting.length ?? 0), 0);
 
-  const activity = getActivity().filter(a => locationIds.includes(a.locationId));
-  const done = activity.filter(a => a.outcome === 'done').length;
-  const noShow = activity.length - done;
+  // dzisiejsze bilety zakończone przez zalogowanego operatora (z serwera)
+  const mine = (history ?? []).filter(e => e.served_by_user_id === currentUserId);
+  const done = mine.filter(e => outcomeOf(e) === 'served').length;
+  const noShow = mine.filter(e => outcomeOf(e) === 'noshow').length;
 
   const longest = active
     .flatMap(l => (queues[l.id]?.waiting ?? []).map(entry => ({ entry, location: l })))
@@ -89,7 +97,7 @@ const UserHome = forwardRef<RefreshHandle, { locationIds: number[]; onOpenQueue:
     <>
       <dl className="summary-line">
         <div><dd>{waitingTotal}</dd><dt>{plural(waitingTotal, ['osoba czeka', 'osoby czekają', 'osób czeka'])} teraz</dt></div>
-        <div><dd>{done}</dd><dt>obsłużono w tej zmianie</dt></div>
+        <div><dd>{done}</dd><dt>obsłużono dzisiaj</dt></div>
         <div><dd>{noShow}</dd><dt>nie zgłosiło się</dt></div>
       </dl>
 

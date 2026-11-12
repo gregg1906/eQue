@@ -175,6 +175,9 @@ Prefiks i konwencja jak dziś: `/api/v1/...`, zasoby admina pod
 | GET | `/api/v1/auth/me` | 🆕 zwraca profil aktualnie zalogowanego na podstawie tokena (`id`, `full_name`, `role`, `location_ids`). Frontend dziś *ufa* temu, co sam zapisał w `localStorage` — to jedyne miejsce, gdzie warto to zweryfikować po stronie serwera. |
 | POST | `/api/v1/auth/refresh` | ✅ wdrożone — wydaje nowy token (ta sama odpowiedź co `login`) w miejsce wciąż ważnego. Panel woła to po połowie czasu życia tokena, jeśli użytkownik był aktywny; bez aktywności token wygasa (`ACCESS_TOKEN_EXPIRE_MINUTES`, domyślnie 120) i panel wylogowuje z komunikatem, a 5 min wcześniej pyta, czy przedłużyć. Wygasły token lub dezaktywowane konto → `401`. |
 
+| GET | `/api/v1/auth/me/preferences` | ✅ wdrożone — ustawienia panelu zapisane na koncie (kolumna `users.preferences`, JSONB): `theme` (`light`/`dark`/`system`), `text_size` (`normal`/`large`/`xlarge`), `high_contrast`, `reduce_motion`, `undo_seconds` (6/10/20), `sound_on_new_ticket`, `default_location_id`, `single_key_shortcuts`. Brakujące pola uzupełniane wartościami domyślnymi. |
+| PUT | `/api/v1/auth/me/preferences` | ✅ wdrożone — zmienia tylko przesłane pola i zwraca komplet. Nieznane pole lub niedozwolona wartość → `422`; `default_location_id` spoza lokalizacji użytkownika → `403`. |
+
 **Uprawnienia (wymuszane przez backend, nie tylko ukryte w UI):**
 - tylko `ADMIN`: wszystkie `/admin/tablets*`, `/admin/users*` oraz tworzenie/edycja/usuwanie/(de)aktywacja `/admin/locations*` (`403` dla operatora); admin nie może odebrać sobie roli; rola musi być `ADMIN` albo `OPERATOR` (`422`);
 - `ADMIN` lub operator przypisany do lokalizacji: `GET /admin/locations/{id}/queue`, `pause-queue`, `resume-queue`, `/admin/tickets/{id}/call|complete|cancel` (`403` dla cudzej lokalizacji);
@@ -240,7 +243,8 @@ przypisaną lokalizację.
 | GET | `/api/v1/admin/locations/{id}/queue` | ✅ wdrożone — lista oczekujących (`status=WAITING`, sortowane po `joined_at`) + aktualnie obsługiwany (`status=SERVING`) |
 | POST | `/api/v1/admin/tickets/{id}/call` | ✅ wdrożone — `status→SERVING`, `served_by_user_id=<zalogowany>`, `called_at=now` |
 | POST | `/api/v1/admin/tickets/{id}/complete` | ✅ wdrożone — `status→COMPLETED`, `served_at=now` |
-| POST | `/api/v1/admin/tickets/{id}/cancel` | ✅ wdrożone — "nie zgłosił się" → `status→CANCELLED`, `served_at=now` |
+| POST | `/api/v1/admin/tickets/{id}/cancel` | ✅ wdrożone — `status→CANCELLED`, `served_at=now`, `close_reason` z parametru `?reason=NO_SHOW\|STAFF_CANCELLED` (domyślnie `NO_SHOW` dla wezwanego biletu, `STAFF_CANCELLED` dla czekającego). Pacjent anulujący przez `/queue/cancel` dostaje `PATIENT_CANCELLED`. Status pozostaje `CANCELLED`, więc aplikacja mobilna działa bez zmian. |
+| GET | `/api/v1/admin/tickets/history` | ✅ wdrożone — zakończone bilety (`COMPLETED`/`CANCELLED`) od `since` (ISO, wymagane — panel wysyła lokalną północ), opcjonalnie `location_id`, `mine=true`, `limit` (≤500). Najnowsze najpierw, z `close_reason` i `served_by_name`. Operator widzi tylko swoje lokalizacje. Źródło listy „Zakończone” i licznika „Twoja zmiana”. |
 
 ### Dashboard (opcjonalnie, ale polecam)
 

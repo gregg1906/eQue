@@ -6,11 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>eQue</title>
     <script>
-      // motyw przed pierwszym malowaniem — bez białego błysku w trybie ciemnym (App.tsx przejmuje dalej)
+      // ustawienia z konta (kopia w localStorage) przed pierwszym malowaniem — bez błysku jasnego tła
+      // i skoku rozmiaru tekstu; App.tsx przejmuje dalej i dociąga aktualne wartości z serwera
       try {
-        var t = localStorage.getItem('eque_theme');
+        var p = JSON.parse(localStorage.getItem('eque_prefs') || 'null') || { theme: localStorage.getItem('eque_theme') };
+        var t = p.theme;
         if (t === 'system') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+        var r = document.documentElement;
+        r.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+        if (p.text_size === 'large' || p.text_size === 'xlarge') r.setAttribute('data-text-size', p.text_size);
+        if (p.high_contrast) r.setAttribute('data-contrast', 'high');
+        if (p.reduce_motion) r.setAttribute('data-motion', 'reduce');
       } catch (e) {}
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

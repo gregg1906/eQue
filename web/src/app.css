@@ -269,10 +269,26 @@
 /* ——— Ustawienia ——— */
 .settings { display: flex; flex-direction: column; gap: 24px; max-width: 620px; }
 .settings form { display: flex; flex-direction: column; gap: 16px; }
+.settings-stack { display: flex; flex-direction: column; gap: 22px; }
+.settings-field { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.settings-field .field-hint { margin: 0; }
+.settings-field .toggle-row { align-self: stretch; }
 
 /* ——— Ograniczony ruch: menu mobilne się przenika, wejścia bez przesunięcia ——— */
-@media (prefers-reduced-motion: reduce) {
+/* menu przenika się tylko jako panel wysuwany na wąskim ekranie — na desktopie jest zawsze widoczne */
+@media (prefers-reduced-motion: reduce) and (max-width: 859px) {
   .sidenav { transform: none; opacity: 0; transition: opacity var(--dur-base) var(--ease-out), visibility 0s var(--dur-base); }
   .sidenav.is-open { opacity: 1; transition: opacity var(--dur-base) var(--ease-out); }
+}
+@media (prefers-reduced-motion: reduce) {
   .attention-item, .step-reveal > *, .step-done .icon { transition-property: opacity; }
 }
+
+/* ——— Ograniczony ruch z ustawień konta (lustro bloku @media powyżej) ——— */
+@media (max-width: 859px) {
+  :root[data-motion="reduce"] .sidenav { transform: none; opacity: 0; transition: opacity var(--dur-base) var(--ease-out), visibility 0s var(--dur-base); }
+  :root[data-motion="reduce"] .sidenav.is-open { opacity: 1; transition: opacity var(--dur-base) var(--ease-out); }
+}
+:root[data-motion="reduce"] .attention-item,
+:root[data-motion="reduce"] .step-reveal > *,
+:root[data-motion="reduce"] .step-done .icon { transition-property: opacity; }

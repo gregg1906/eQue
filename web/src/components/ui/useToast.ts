@@ -23,7 +23,7 @@ export interface ToastState {
   closing: boolean;
 }
 
-export const UNDO_WINDOW_MS = 6000;
+const DEFAULT_DURATION_MS = 6000;
 const EXIT_MS = 120;
 
 let state: ToastState = { item: null, closing: false };
@@ -50,7 +50,7 @@ export function showToast(text: string, opts: ToastOptions = {}): number {
   const tone = opts.tone ?? 'default';
   const item: ToastItem = { id: ++seq, text, tone, undo: opts.undo };
   setState({ item, closing: false });
-  timer = setTimeout(() => dismissToast(item.id), opts.duration ?? (tone === 'error' ? 8000 : UNDO_WINDOW_MS));
+  timer = setTimeout(() => dismissToast(item.id), opts.duration ?? (tone === 'error' ? 8000 : DEFAULT_DURATION_MS));
   return item.id;
 }
 
