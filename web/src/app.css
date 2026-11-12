@@ -232,6 +232,7 @@
 .toggle-row-text { display: flex; flex-direction: column; gap: 2px; }
 .toggle-row-text b { color: var(--text-strong); font-weight: 700; }
 .toggle-row-text span { font-size: var(--text-sm); color: var(--text-muted); }
+.toggle-row-text .toggle-row-system { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--text-body); font-weight: 600; }
 .step-done { display: flex; align-items: center; gap: 10px; color: var(--queue-served); font-weight: 700; margin: 0; }
 /* „Tablet utworzony” — rzadki moment sukcesu: treść wchodzi kolejno (40 ms), ✓ rośnie od 0.8 */
 .step-reveal { display: flex; flex-direction: column; gap: 24px; }
@@ -292,3 +293,15 @@
 :root[data-motion="reduce"] .attention-item,
 :root[data-motion="reduce"] .step-reveal > *,
 :root[data-motion="reduce"] .step-done .icon { transition-property: opacity; }
+
+/* ——— Motywy kontrastu w Windows (forced-colors) — zob. komentarz w ui.css ——— */
+@media (forced-colors: active) {
+  /* bieżąca pozycja menu była tylko tłem */
+  .sidenav-item[aria-current="page"] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .sidenav-item[aria-current="page"] .sidenav-count { color: HighlightText; }
+  /* panel „Teraz obsługiwany” był kolorowym tłem bez ramki */
+  .serving-panel { border: 2px solid CanvasText; }
+  /* pasek postępu zmiany: tor i wypełnienie */
+  .meter { border: 1px solid CanvasText; }
+  .meter i { forced-color-adjust: none; background: Highlight; }
+}

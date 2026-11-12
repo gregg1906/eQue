@@ -4,6 +4,7 @@ import type { LocationResponse, TextSize, ThemePreference, UndoSeconds, UserPref
 import { updatePreferences, usePreferences } from '../lib/preferences';
 import { playChime } from '../lib/sound';
 import { sortByName } from '../lib/sort';
+import { SYSTEM_MORE_CONTRAST, SYSTEM_REDUCED_MOTION, useMediaQuery } from '../lib/theme';
 import { showToast } from './ui/useToast';
 import Button from './ui/Button';
 import { Field, Input } from './ui/Field';
@@ -90,25 +91,33 @@ function save(patch: Partial<UserPreferences>) {
   });
 }
 
-function ToggleRow({ title, text, checked, onChange }: {
+function ToggleRow({ title, text, checked, onChange, systemNote }: {
   title: string;
   text: string;
   checked: boolean;
   onChange: (next: boolean) => void;
+  /**
+    Ustawienie jest już włączone w systemie operacyjnym — działa niezależnie od przełącznika,
+    więc pokazujemy go jako włączony i zablokowany, z wyjaśnieniem zamiast mylącego „wyłączone”.
+  */
+  systemNote?: string;
 }) {
   return (
     <div className="toggle-row">
       <div className="toggle-row-text">
         <b>{title}</b>
         <span>{text}</span>
+        {systemNote && <span className="toggle-row-system"><Icon name="monitor" size={14} />{systemNote}</span>}
       </div>
-      <Switch checked={checked} onChange={onChange} label={title} />
+      <Switch checked={checked || !!systemNote} onChange={onChange} label={title} disabled={!!systemNote} />
     </div>
   );
 }
 
 function AppearanceCard() {
   const prefs = usePreferences();
+  const systemContrast = useMediaQuery(SYSTEM_MORE_CONTRAST);
+  const systemMotion = useMediaQuery(SYSTEM_REDUCED_MOTION);
   return (
     <section className="card card-pad" aria-labelledby="appearance-title">
       <h2 className="card-title" id="appearance-title">Wygląd i czytelność</h2>
@@ -152,12 +161,14 @@ function AppearanceCard() {
           text="Ciemniejszy tekst pomocniczy, wyraźniejsze obramowania i grubszy obrys zaznaczenia."
           checked={prefs.high_contrast}
           onChange={high_contrast => save({ high_contrast })}
+          systemNote={systemContrast ? 'Włączony w ustawieniach systemu — działa także na ekranie logowania.' : undefined}
         />
         <ToggleRow
           title="Ogranicz animacje"
-          text="Panele i powiadomienia pojawiają się bez przesuwania, a migające wskaźniki stoją w miejscu. Jeśli masz to włączone w systemie, działa także bez tego przełącznika."
+          text="Panele i powiadomienia pojawiają się bez przesuwania, a migające wskaźniki stoją w miejscu."
           checked={prefs.reduce_motion}
           onChange={reduce_motion => save({ reduce_motion })}
+          systemNote={systemMotion ? 'Włączone w ustawieniach systemu — działa także na ekranie logowania.' : undefined}
         />
       </div>
     </section>

@@ -6,16 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>eQue</title>
     <script>
-      // ustawienia z konta (kopia w localStorage) przed pierwszym malowaniem — bez błysku jasnego tła
-      // i skoku rozmiaru tekstu; App.tsx przejmuje dalej i dociąga aktualne wartości z serwera
+      // ustawienia przed pierwszym malowaniem — bez błysku jasnego tła i skoku rozmiaru tekstu.
+      // Zalogowany: kopia ustawień z konta (localStorage); App.tsx dociąga potem aktualne z serwera.
+      // Ekran logowania (brak tokena): motyw i kontrast z systemu, nie ustawienia poprzedniej osoby.
+      // Ta sama logika co applyPreferencesToDocument w src/lib/preferences.ts.
       try {
-        var p = JSON.parse(localStorage.getItem('eque_prefs') || 'null') || { theme: localStorage.getItem('eque_theme') };
-        var t = p.theme;
-        if (t === 'system') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        var mq = function (q) { return !!(window.matchMedia && window.matchMedia(q).matches); };
+        var signedIn = !!localStorage.getItem('eque_token');
+        var p = (signedIn && JSON.parse(localStorage.getItem('eque_prefs') || 'null'))
+          || (signedIn && { theme: localStorage.getItem('eque_theme') || 'light' })
+          || { theme: 'system' };
+        var t = p.theme === 'system' ? (mq('(prefers-color-scheme: dark)') ? 'dark' : 'light') : p.theme;
         var r = document.documentElement;
         r.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
         if (p.text_size === 'large' || p.text_size === 'xlarge') r.setAttribute('data-text-size', p.text_size);
-        if (p.high_contrast) r.setAttribute('data-contrast', 'high');
+        if (p.high_contrast || mq('(prefers-contrast: more)')) r.setAttribute('data-contrast', 'high');
         if (p.reduce_motion) r.setAttribute('data-motion', 'reduce');
       } catch (e) {}
     </script>

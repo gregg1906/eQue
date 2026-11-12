@@ -22,8 +22,8 @@ import { DialogHost } from './lib/dialogs';
 import { startSessionKeeper } from './lib/session';
 import { runQueueCommand } from './lib/commands';
 import { sortByName } from './lib/sort';
-import { systemPrefersDark, type ThemePreference } from './lib/theme';
-import { applyPreferencesToDocument, loadPreferences, updatePreferences, usePreferences } from './lib/preferences';
+import { SYSTEM_DARK, SYSTEM_MORE_CONTRAST, useMediaQuery, type ThemePreference } from './lib/theme';
+import { applyPreferencesToDocument, loadPreferences, resetPreferences, updatePreferences, usePreferences } from './lib/preferences';
 import { useNewTicketSound } from './lib/sound';
 import { showToast } from './components/ui/useToast';
 import { useWaitingTotal } from './lib/useWaitingTotal';
@@ -91,19 +91,13 @@ export default function App() {
 
   // Ustawienia z konta (motyw, rozmiar tekstu, kontrast, ruch…) — patrz lib/preferences.ts
   const prefs = usePreferences();
-  const [systemDark, setSystemDark] = useState(systemPrefersDark);
-
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
-    if (!mq) return;
-    const onChange = () => setSystemDark(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
+  // ustawienia systemu: motyw „Systemowy” i ekran logowania; kontrast z systemu działa zawsze
+  const systemDark = useMediaQuery(SYSTEM_DARK);
+  const systemMoreContrast = useMediaQuery(SYSTEM_MORE_CONTRAST);
 
   useLayoutEffect(() => {
-    applyPreferencesToDocument(prefs, systemDark);
-  }, [prefs, systemDark]);
+    applyPreferencesToDocument(prefs, { dark: systemDark, moreContrast: systemMoreContrast });
+  }, [prefs, systemDark, systemMoreContrast]);
 
   const setTheme = useCallback((theme: ThemePreference) => {
     updatePreferences({ theme }).catch(() => {
@@ -126,6 +120,7 @@ export default function App() {
         })
         .catch(err => {
           clearToken();
+          resetPreferences();
           if (err instanceof ApiError && err.status === 401) setLoginNotice(SESSION_EXPIRED);
         })
         .finally(() => setCheckingSession(false));
@@ -141,6 +136,8 @@ export default function App() {
     setAddOpen(false);
     setIntent(null);
     clearToken();
+    // ekran logowania wraca do ustawień systemu, a nie ustawień osoby, która właśnie skończyła
+    resetPreferences();
     setLoginNotice(notice);
   }, []);
 

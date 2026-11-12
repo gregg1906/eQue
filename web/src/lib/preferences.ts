@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { api } from './api';
+import { api, getToken } from './api';
 import type { UserPreferences } from './apiTypes';
 
 /*
@@ -9,6 +9,10 @@ import type { UserPreferences } from './apiTypes';
   localStorage („eque_prefs”) to tylko kopia do pierwszego malowania — skrypt w index.html
   ustawia z niej motyw, rozmiar tekstu i kontrast, zanim React się uruchomi, żeby nie było
   błysku jasnego tła albo skoku rozmiaru czcionki. Źródłem prawdy jest serwer.
+
+  Bez zalogowanego użytkownika (ekran logowania) obowiązują SIGNED_OUT_PREFERENCES — motyw
+  i kontrast z ustawień systemu, a nie ustawienia osoby, która pracowała przy komputerze
+  ostatnia. Wylogowanie czyści kopię lokalną (resetPreferences).
 */
 
 const CACHE_KEY = 'eque_prefs';
@@ -24,6 +28,9 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   default_location_id: null,
   single_key_shortcuts: true,
 };
+
+/** Ekran logowania: motyw systemowy, reszta domyślna; kontrast i ruch dochodzą z systemu (theme.ts). */
+export const SIGNED_OUT_PREFERENCES: UserPreferences = { ...DEFAULT_PREFERENCES, theme: 'system' };
 
 function readCache(): UserPreferences {
   try {
@@ -47,7 +54,17 @@ function writeCache(prefs: UserPreferences) {
   }
 }
 
-let state: UserPreferences = readCache();
+function clearCache() {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(LEGACY_THEME_KEY);
+  } catch {
+    // brak dostępu do localStorage — nie ma czego czyścić
+  }
+}
+
+// kopia lokalna należy do zalogowanego — bez tokena nie pokazujemy cudzych ustawień
+let state: UserPreferences = getToken() ? readCache() : SIGNED_OUT_PREFERENCES;
 let seq = 0;
 const listeners = new Set<() => void>();
 
@@ -67,6 +84,18 @@ export function usePreferences(): UserPreferences {
     getPreferences,
     getPreferences,
   );
+}
+
+/**
+  Wylogowanie: wraca do ustawień ekranu logowania i usuwa kopię lokalną, żeby po przeładowaniu
+  strony (skrypt w index.html) też nie wróciły ustawienia poprzedniej osoby. Unieważnia
+  też pobieranie albo zapis, który jeszcze trwa.
+*/
+export function resetPreferences() {
+  ++seq;
+  state = SIGNED_OUT_PREFERENCES;
+  clearCache();
+  listeners.forEach(l => l());
 }
 
 /** Pobiera ustawienia z konta — wołać po zalogowaniu i po odtworzeniu sesji. */
@@ -93,14 +122,24 @@ export async function updatePreferences(patch: Partial<UserPreferences>): Promis
   }
 }
 
-/** Ustawia atrybuty data-* na <html>, z których korzystają style (tokens.css). */
-export function applyPreferencesToDocument(prefs: UserPreferences, systemDark: boolean) {
+/** Ustawienia systemu operacyjnego, które uzupełniają ustawienia z konta (theme.ts). */
+export interface SystemSettings {
+  dark: boolean;
+  moreContrast: boolean;
+}
+
+/**
+  Ustawia atrybuty data-* na <html>, z których korzystają style (tokens.css).
+  Wysoki kontrast włącza się, gdy chce go konto ALBO system — tak jak ograniczenie animacji,
+  które CSS stosuje przy ustawieniu z konta albo prefers-reduced-motion.
+*/
+export function applyPreferencesToDocument(prefs: UserPreferences, system: SystemSettings) {
   const root = document.documentElement;
-  const theme = prefs.theme === 'system' ? (systemDark ? 'dark' : 'light') : prefs.theme;
+  const theme = prefs.theme === 'system' ? (system.dark ? 'dark' : 'light') : prefs.theme;
   root.setAttribute('data-theme', theme);
   if (prefs.text_size === 'normal') root.removeAttribute('data-text-size');
   else root.setAttribute('data-text-size', prefs.text_size);
-  if (prefs.high_contrast) root.setAttribute('data-contrast', 'high');
+  if (prefs.high_contrast || system.moreContrast) root.setAttribute('data-contrast', 'high');
   else root.removeAttribute('data-contrast');
   if (prefs.reduce_motion) root.setAttribute('data-motion', 'reduce');
   else root.removeAttribute('data-motion');

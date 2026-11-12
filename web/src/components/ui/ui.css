@@ -360,3 +360,40 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 :root[data-motion="reduce"] .float-label,
 :root[data-motion="reduce"] .input-float:focus + .float-label,
 :root[data-motion="reduce"] .input-float:not(:placeholder-shown) + .float-label { transition-property: color; }
+
+/* ——— Motywy kontrastu w Windows (forced-colors) ———
+   Przeglądarka podmienia wtedy kolory na systemowe, usuwa cienie (box-shadow) i tła.
+   Wszystko, co sygnalizowało stan samym tłem albo cieniem, dostaje tu obramowanie
+   albo kolory systemowe (Highlight, ButtonText…), żeby nie zniknęło. */
+@media (forced-colors: active) {
+  /* fokus pola był tylko cieniem — w tym trybie byłby niewidoczny */
+  .input:focus, .input:focus-visible,
+  .select-trigger[aria-expanded="true"] { outline: 2px solid Highlight; outline-offset: 1px; }
+
+  /* włącznik: tor i gałka były samym tłem */
+  .switch { border: 1px solid ButtonText; }
+  .switch::after { forced-color-adjust: none; background: ButtonText; box-shadow: none; top: 2px; left: 2px; }
+  .switch[aria-checked="true"] { forced-color-adjust: none; background: Highlight; border-color: Highlight; }
+  .switch[aria-checked="true"]::after { background: HighlightText; }
+  .switch:disabled { opacity: 1; border-color: GrayText; }
+  .switch:disabled::after, .switch[aria-checked="true"]:disabled { background: GrayText; border-color: GrayText; }
+  .switch[aria-checked="true"]:disabled::after { background: Canvas; }
+
+  /* przełącznik segmentowy: wybrana opcja była jaśniejszym tłem z cieniem */
+  .seg { border: 1px solid ButtonText; }
+  .seg button[aria-selected="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .seg button[aria-selected="true"] .seg-letter,
+  .seg button[aria-selected="true"] .seg-count { color: HighlightText; }
+
+  /* listy z podświetleniem klawiaturą */
+  .select-option.is-highlighted,
+  .cmdk li[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+
+  /* warstwy oddzielone od tła tylko cieniem */
+  .select-panel, .toast, .dialog, .cmdk { border: 1px solid CanvasText; }
+
+  /* kropki statusu były samym tłem; znaczenie niesie też tekst obok */
+  .pill::before, .live-dot, .avatar-dot { forced-color-adjust: none; background: CanvasText; }
+  .pill-offline::before { background: Canvas; border-color: CanvasText; }
+  .pill-paused::before { background: Canvas; border-color: CanvasText; }
+}

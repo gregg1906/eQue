@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, setToken, ApiError } from '../lib/api';
 import type { MeResponse, TokenResponse } from '../lib/apiTypes';
+import { loadPreferences } from '../lib/preferences';
 import Button from './ui/Button';
 import FloatingInput from './ui/FloatingInput';
 import Icon from './ui/Icon';
@@ -33,7 +34,11 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
     try {
       const token = await api.post<TokenResponse>('/auth/login', { username, password });
       setToken(token.access_token);
-      const me = await api.get<MeResponse>('/auth/me');
+      // ustawienia z konta przed wejściem do panelu — inaczej panel mignąłby w motywie ekranu logowania
+      const [me] = await Promise.all([
+        api.get<MeResponse>('/auth/me'),
+        loadPreferences().catch(() => { /* panel i tak dociągnie je po wejściu */ }),
+      ]);
       onLoginSuccess(me);
     } catch (err) {
       // 429: serwer zablokował logowanie po zbyt wielu nieudanych próbach — komunikat mówi, na ile minut
