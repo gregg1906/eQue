@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import Avatar from './Avatar';
 import Icon, { type IconName } from './Icon';
+import LiveIndicator from './LiveIndicator';
+import { useSessionRemaining } from '../../lib/session';
 
 export interface NavItem {
   key: string;
@@ -42,13 +44,34 @@ function useMobileNavFocus(open: boolean, onClose: () => void) {
   return asideRef;
 }
 
-export default function SideNav({ groups, activeTab, onSelect, userName, roleLabel, onLogout, open, onClose, label }: {
+function formatRemaining(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(sec).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+function SessionTimer() {
+  const left = useSessionRemaining();
+  if (left === null) return null;
+  return (
+    <span className="session-timer" title="Czas do automatycznego wylogowania (odnawia się przy aktywności)">
+      Wylogowanie za <b>{formatRemaining(left)}</b>
+    </span>
+  );
+}
+
+export default function SideNav({ groups, activeTab, onSelect, userName, roleLabel, onLogout, onRefresh, open, onClose, label }: {
   groups: NavGroup[];
   activeTab: string;
   onSelect: (key: string) => void;
   userName: string;
   roleLabel: string;
   onLogout: () => void;
+  onRefresh?: () => Promise<void> | void;
   /** Stan panelu na wąskim ekranie. */
   open: boolean;
   onClose: () => void;
@@ -93,6 +116,11 @@ export default function SideNav({ groups, activeTab, onSelect, userName, roleLab
             </div>
           ))}
         </nav>
+
+        <div className="sidenav-status">
+          <LiveIndicator onRefresh={onRefresh} />
+          <SessionTimer />
+        </div>
 
         <div className="sidenav-user">
           <Avatar name={userName} online />

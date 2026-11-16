@@ -12,13 +12,11 @@ import Drawer from './ui/Drawer';
 import { Field, Input } from './ui/Field';
 import Icon from './ui/Icon';
 import QueueLetter from './ui/QueueLetter';
-import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import StatusPill from './ui/StatusPill';
 import Switch from './ui/Switch';
 import EmptyState from './ui/EmptyState';
 
-type Filter = 'all' | 'active' | 'off';
 
 function errorMessage(err: unknown, fallback: string) {
   return err instanceof ApiError ? `${fallback}: ${err.message}` : `${fallback}. Sprawdź połączenie i spróbuj ponownie.`;
@@ -58,7 +56,6 @@ const AdminDashboard = forwardRef<RefreshHandle, {
   const [devices, setDevices] = useState<TabletResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
   useTick(60000);
 
   const refetch = useCallback(async () => {
@@ -238,8 +235,11 @@ const AdminDashboard = forwardRef<RefreshHandle, {
   const q = query.trim().toLowerCase();
   const visibleDevices = sortByName(
     devices.filter(d =>
-      (filter === 'all' || (filter === 'active' ? d.is_active : !d.is_active)) &&
-      (!q || d.name.toLowerCase().includes(q) || (d.location_id !== null && (locationById.get(d.location_id)?.name ?? '').toLowerCase().includes(q)))
+      !q || [
+        d.name,
+        d.location_id !== null ? locationById.get(d.location_id)?.name : undefined,
+        d.location_id !== null ? locationById.get(d.location_id)?.queue_code : undefined,
+      ].some(v => (v ?? '').toLowerCase().includes(q))
     ),
     d => d.name
   );
@@ -252,16 +252,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
           <Icon name="search" />
           <Input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj po nazwie lub lokalizacji" aria-label="Szukaj tabletów" />
         </div>
-        <Segmented
-          label="Filtr statusu"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'Wszystkie' },
-            { value: 'active', label: 'Aktywne' },
-            { value: 'off', label: 'Dezaktywowane' },
-          ]}
-        />
+        <Button variant="primary" icon="plus" onClick={onAddOpen}>Dodaj tablet</Button>
       </div>
 
       <div className="dtable-wrap">
@@ -281,7 +272,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
                       action={<Button variant="primary" icon="plus" onClick={onAddOpen}>Dodaj tablet</Button>}
                     />
                   ) : (
-                    <EmptyState title="Brak pasujących tabletów" text="Zmień wyszukiwaną frazę albo filtr statusu." />
+                    <EmptyState title="Brak pasujących tabletów" text="Zmień wyszukiwaną frazę." />
                   )}
                 </td>
               </tr>

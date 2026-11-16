@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { api, getToken, setToken } from './api';
 import { closeDialog, confirmDialog } from './dialog-actions';
 import type { TokenResponse } from './apiTypes';
@@ -128,4 +129,21 @@ export function startSessionKeeper({ onExpired, onLogout }: SessionKeeperOptions
   }
 
   return stop;
+}
+
+/** Ile ms zostało do wygaśnięcia bieżącego tokena (null, gdy brak tokena). */
+export function getSessionRemainingMs(): number | null {
+  const token = getToken();
+  const times = token ? readTokenTimes(token) : null;
+  return times ? Math.max(0, times.expiresAt - Date.now()) : null;
+}
+
+/** Odliczanie do końca sesji, odświeżane co sekundę (token jest odnawiany przy aktywności). */
+export function useSessionRemaining(): number | null {
+  const [left, setLeft] = useState<number | null>(getSessionRemainingMs);
+  useEffect(() => {
+    const id = setInterval(() => setLeft(getSessionRemainingMs()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return left;
 }

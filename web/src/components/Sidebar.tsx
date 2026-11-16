@@ -5,6 +5,7 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   userName: string;
   onLogout: () => void;
+  onRefresh?: () => Promise<void> | void;
   open: boolean;
   onClose: () => void;
 }
@@ -22,7 +23,7 @@ const GROUPS: NavGroup[] = [
   { label: 'Konto', items: [{ key: 'ustawienia', label: 'Ustawienia', icon: 'cog' }] },
 ];
 
-export default function Sidebar({ activeTab, setActiveTab, userName, onLogout, open, onClose }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, userName, onLogout, onRefresh, open, onClose }: SidebarProps) {
   return (
     <SideNav
       label="Nawigacja administratora"
@@ -32,6 +33,7 @@ export default function Sidebar({ activeTab, setActiveTab, userName, onLogout, o
       userName={userName}
       roleLabel="Administrator"
       onLogout={onLogout}
+      onRefresh={onRefresh}
       open={open}
       onClose={onClose}
     />

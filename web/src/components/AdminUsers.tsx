@@ -12,13 +12,11 @@ import Drawer from './ui/Drawer';
 import { Field, Input } from './ui/Field';
 import Icon from './ui/Icon';
 import PasswordStrength from './ui/PasswordStrength';
-import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import StatusPill from './ui/StatusPill';
 import Switch from './ui/Switch';
 import EmptyState from './ui/EmptyState';
 
-type Filter = 'all' | 'active' | 'off';
 
 const ROLE_OPTIONS = [
   { value: 'OPERATOR', label: 'Operator' },
@@ -41,7 +39,6 @@ const AdminUsers = forwardRef<RefreshHandle, {
   const [locations, setLocations] = useState<LocationResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
 
   const refetch = useCallback(async () => {
     try {
@@ -242,8 +239,10 @@ const AdminUsers = forwardRef<RefreshHandle, {
   const q = query.trim().toLowerCase();
   const visibleUsers = sortByName(
     users.filter(u =>
-      (filter === 'all' || (filter === 'active' ? u.is_active : !u.is_active)) &&
-      (!q || u.full_name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q))
+      !q || [
+        u.full_name, u.username, u.position,
+        ...u.location_ids.map(id => locationById.get(id)?.name),
+      ].some(v => (v ?? '').toLowerCase().includes(q))
     ),
     u => u.full_name
   );
@@ -255,18 +254,9 @@ const AdminUsers = forwardRef<RefreshHandle, {
       <div className="filters">
         <div className="search">
           <Icon name="search" />
-          <Input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj po imieniu lub loginie" aria-label="Szukaj użytkowników" />
+          <Input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj po imieniu, loginie lub lokalizacji" aria-label="Szukaj użytkowników" />
         </div>
-        <Segmented
-          label="Filtr statusu"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'Wszyscy' },
-            { value: 'active', label: 'Aktywni' },
-            { value: 'off', label: 'Dezaktywowani' },
-          ]}
-        />
+        <Button variant="primary" icon="plus" onClick={onAddOpen}>Dodaj użytkownika</Button>
       </div>
 
       <div className="dtable-wrap">
@@ -286,7 +276,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
                       action={<Button variant="primary" icon="plus" onClick={onAddOpen}>Dodaj użytkownika</Button>}
                     />
                   ) : (
-                    <EmptyState title="Brak pasujących pracowników" text="Zmień wyszukiwaną frazę albo filtr statusu." />
+                    <EmptyState title="Brak pasujących pracowników" text="Zmień wyszukiwaną frazę." />
                   )}
                 </td>
               </tr>

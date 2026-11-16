@@ -5,13 +5,14 @@ interface UserSidebarProps {
   setActiveTab: (tab: string) => void;
   userName: string;
   onLogout: () => void;
+  onRefresh?: () => Promise<void> | void;
   /** Liczba czekających we wszystkich lokalizacjach operatora (licznik przy „Kolejka na żywo”). */
   waitingCount?: number;
   open: boolean;
   onClose: () => void;
 }
 
-export default function UserSidebar({ activeTab, setActiveTab, userName, onLogout, waitingCount, open, onClose }: UserSidebarProps) {
+export default function UserSidebar({ activeTab, setActiveTab, userName, onLogout, onRefresh, waitingCount, open, onClose }: UserSidebarProps) {
   return (
     <SideNav
       label="Nawigacja operatora"
@@ -29,6 +30,7 @@ export default function UserSidebar({ activeTab, setActiveTab, userName, onLogou
       userName={userName}
       roleLabel="Operator"
       onLogout={onLogout}
+      onRefresh={onRefresh}
       open={open}
       onClose={onClose}
     />

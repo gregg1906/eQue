@@ -10,13 +10,11 @@ import Drawer from './ui/Drawer';
 import { Field, Input, Textarea } from './ui/Field';
 import Icon from './ui/Icon';
 import QueueLetter from './ui/QueueLetter';
-import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import StatusPill from './ui/StatusPill';
 import Switch from './ui/Switch';
 import EmptyState from './ui/EmptyState';
 
-type Filter = 'all' | 'active' | 'off';
 
 interface LocationDraft {
   id: number;
@@ -56,7 +54,6 @@ const AdminLocations = forwardRef<RefreshHandle, {
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
 
   const refetch = useCallback(async () => {
     try {
@@ -255,8 +252,10 @@ const AdminLocations = forwardRef<RefreshHandle, {
   const q = query.trim().toLowerCase();
   const visibleLocations = sortByName(
     locations.filter(l =>
-      (filter === 'all' || (filter === 'active' ? l.is_active : !l.is_active)) &&
-      (!q || l.name.toLowerCase().includes(q) || (l.description ?? '').toLowerCase().includes(q))
+      !q || [
+        l.name, l.description, l.queue_code, l.tablet?.name,
+        ...l.user_ids.flatMap(id => { const u = userById.get(id); return u ? [u.full_name, u.username] : []; }),
+      ].some(v => (v ?? '').toLowerCase().includes(q))
     ),
     l => l.name
   );
@@ -268,18 +267,9 @@ const AdminLocations = forwardRef<RefreshHandle, {
       <div className="filters">
         <div className="search">
           <Icon name="search" />
-          <Input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj po nazwie" aria-label="Szukaj lokalizacji" />
+          <Input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Szukaj po nazwie, kiosku lub operatorze" aria-label="Szukaj lokalizacji" />
         </div>
-        <Segmented
-          label="Filtr statusu"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'Wszystkie' },
-            { value: 'active', label: 'Aktywne' },
-            { value: 'off', label: 'Dezaktywowane' },
-          ]}
-        />
+        <Button variant="primary" icon="plus" onClick={onAddOpen}>Dodaj lokalizację</Button>
       </div>
 
       <div className="dtable-wrap">
@@ -299,7 +289,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
                       action={<Button variant="primary" icon="plus" onClick={onAddOpen}>Dodaj lokalizację</Button>}
                     />
                   ) : (
-                    <EmptyState title="Brak pasujących lokalizacji" text="Zmień wyszukiwaną frazę albo filtr statusu." />
+                    <EmptyState title="Brak pasujących lokalizacji" text="Zmień wyszukiwaną frazę." />
                   )}
                 </td>
               </tr>

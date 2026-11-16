@@ -9,10 +9,8 @@ import Sidebar from './components/Sidebar';
 import UserSidebar from './components/UserSidebar';
 import UserHome from './components/UserHome';
 import UserQueue from './components/UserQueue';
-import Button from './components/ui/Button';
 import Icon from './components/ui/Icon';
 import Kbd from './components/ui/Kbd';
-import LiveIndicator from './components/ui/LiveIndicator';
 import CommandPalette, { type CommandItem } from './components/ui/CommandPalette';
 import EmptyState from './components/ui/EmptyState';
 import { ToastHost } from './components/ui/Toast';
@@ -292,6 +290,7 @@ export default function App() {
           setActiveTab={switchTab}
           userName={userName}
           onLogout={handleLogout}
+          onRefresh={() => contentRef.current?.refetch()}
           open={navOpen}
           onClose={() => setNavOpen(false)}
         />
@@ -301,6 +300,7 @@ export default function App() {
           setActiveTab={switchTab}
           userName={userName}
           onLogout={handleLogout}
+          onRefresh={() => contentRef.current?.refetch()}
           waitingCount={waitingCount}
           open={navOpen}
           onClose={() => setNavOpen(false)}
@@ -321,8 +321,6 @@ export default function App() {
           </button>
           <h1 className="app-title">{meta.title}</h1>
           <div className="app-head-actions">
-            {activeTab !== 'ustawienia' && <LiveIndicator onRefresh={() => contentRef.current?.refetch()} />}
-            {meta.action && <Button variant="primary" icon="plus" onClick={openAdd}>{meta.action}</Button>}
             <button
               type="button"
               className="cmdk-btn"
