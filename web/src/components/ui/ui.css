@@ -77,6 +77,17 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
 /* ——— Pole z pływającą etykietą (logowanie) ——— */
 .float-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .float-control { position: relative; }
+.pw-wrap { position: relative; }
+.pw-wrap .input.pw-input, .float-control .input.pw-input { padding-right: 44px; }
+.pw-toggle {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%); z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text-muted); cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.pw-toggle:hover { background: var(--surface-sunken); color: var(--text-strong); }
+.pw-toggle[aria-pressed="true"] { color: var(--text-brand); }
+.pw-toggle .icon { width: 20px; height: 20px; }
 .input.input-float { height: 52px; padding: 20px 13px 4px; }
 .float-label {
   position: absolute; left: 14px; top: 50%; max-width: calc(100% - 28px);
@@ -212,6 +223,7 @@ textarea.input { height: auto; padding: 10px 12px; resize: vertical; line-height
   font-family: var(--font-display); font-weight: 700; font-size: var(--text-sm);
 }
 .qletter.is-off { background: var(--surface-sunken); color: var(--text-muted); }
+.qletter-sm { width: 18px; height: 18px; font-size: 11px; }
 .qletter-lg { width: 36px; height: 36px; font-size: var(--text-base); }
 
 /* ——— Avatar ——— */

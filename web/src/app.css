@@ -274,9 +274,14 @@
 }
 
 /* ——— Ustawienia ——— */
-.settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.settings { display: flex; align-items: flex-start; gap: 24px; }
+.settings-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
 /* rem, nie px: przy większym tekście karty zwężają się, więc układ składa się wcześniej */
-@container (max-width: 50rem) { .settings { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 50rem) {
+  .settings { flex-direction: column; align-items: stretch; }
+  .settings-col { display: contents; }
+  .settings-item { order: var(--i); }
+}
 .settings form { display: flex; flex-direction: column; gap: 16px; }
 .settings-stack { display: flex; flex-direction: column; gap: 22px; }
 .settings-field { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }

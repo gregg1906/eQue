@@ -24,7 +24,7 @@ import { SYSTEM_DARK, SYSTEM_MORE_CONTRAST, useMediaQuery, type ThemePreference 
 import { applyPreferencesToDocument, loadPreferences, resetPreferences, updatePreferences, usePreferences } from './lib/preferences';
 import { useNewTicketSound } from './lib/sound';
 import { showToast } from './components/ui/useToast';
-import { useWaitingTotal } from './lib/useWaitingTotal';
+import { useQueueSummaries } from './lib/useQueueSummaries';
 import type { LocationResponse, MeResponse, RefreshHandle } from './lib/apiTypes';
 
 type Role = 'admin' | 'user' | null;
@@ -61,11 +61,17 @@ const TAB_META: Record<string, { title: string; action: string | null }> = {
   tablety:       { title: 'Tablety',         action: 'Dodaj tablet' },
   uzytkownicy:   { title: 'Użytkownicy',     action: 'Dodaj użytkownika' },
   ustawienia:    { title: 'Ustawienia',      action: null },
-  kolejka:       { title: 'Kolejka na żywo', action: null },
 };
 
 const ADMIN_TABS = ['strona_glowna', 'lokalizacje', 'tablety', 'uzytkownicy', 'ustawienia'];
-const USER_TABS = ['strona_glowna', 'kolejka', 'ustawienia'];
+const USER_TABS = ['strona_glowna', 'ustawienia'];
+
+/** Zakładka kolejki operatora: „kolejka:<id lokalizacji>”. */
+const queueTab = (locationId: number) => `kolejka:${locationId}`;
+function queueIdFromTab(tab: string): number | null {
+  const m = /^kolejka:(\d+)$/.exec(tab);
+  return m ? Number(m[1]) : null;
+}
 const NO_LOCATIONS: number[] = [];
 
 const SESSION_EXPIRED = 'Twoja sesja wygasła. Zaloguj się ponownie, żeby kontynuować pracę.';
@@ -79,7 +85,7 @@ export default function App() {
   /** Komunikat na ekranie logowania, np. o wygaśnięciu sesji. */
   const [loginNotice, setLoginNotice] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<string>('strona_glowna');
+  const [selectedTab, setActiveTab] = useState<string>('strona_glowna');
   const [addOpen, setAddOpen] = useState(false);
   const [intent, setIntent] = useState<Intent | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -185,7 +191,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [paletteOpen, session]);
 
-  const waitingCount = useWaitingTotal(session?.locationIds ?? NO_LOCATIONS, session?.role === 'user');
+  const queues = useQueueSummaries(session?.locationIds ?? NO_LOCATIONS, session?.role === 'user');
   useNewTicketSound(session?.locationIds ?? NO_LOCATIONS, session?.role === 'user');
 
   const clearIntent = useCallback(() => setIntent(null), []);
@@ -206,14 +212,12 @@ export default function App() {
     setIntent(opts?.editId !== undefined ? { tab, id: opts.editId } : null);
   }, []);
 
+  const defaultQueueId = prefs.default_location_id;
   const openQueue = (locationId?: number) => {
-    if (activeTab === 'kolejka') {
-      if (locationId !== undefined) runQueueCommand({ type: 'select', locationId });
-      return;
-    }
-    setActiveTab('kolejka');
-    setNavOpen(false);
-    setIntent(locationId !== undefined ? { tab: 'kolejka', id: locationId } : null);
+    const id = locationId
+      ?? (defaultQueueId !== null && queues?.some(q => q.id === defaultQueueId) ? defaultQueueId : queues?.[0]?.id);
+    if (id === undefined) return;
+    switchTab(queueTab(id));
   };
 
   const handleLoginSuccess = (me: MeResponse) => {
@@ -236,14 +240,19 @@ export default function App() {
   }
 
   const { id: currentUserId, role, fullName: userName, locationIds } = session;
-  const meta = TAB_META[activeTab] ?? { title: activeTab, action: null };
+  // Kolejka, której już nie ma wśród aktywnych lokalizacji operatora (np. dezaktywowana), → Pulpit
+  const openQueueId = queueIdFromTab(selectedTab);
+  const queueGone = openQueueId !== null && (role !== 'user' || (queues !== undefined && !queues.some(q => q.id === openQueueId)));
+  const activeTab = queueGone ? homeTab() : selectedTab;
+  const activeQueue = openQueueId !== null ? queues?.find(q => q.id === openQueueId) : undefined;
+  const meta = TAB_META[activeTab] ?? { title: activeQueue?.name ?? 'Kolejka', action: null };
   const intentId = (tab: string) => (intent?.tab === tab ? intent.id : null);
 
   const paletteItems: CommandItem[] = [
     ...(role === 'admin' ? ADMIN_TABS : USER_TABS).map(tab => ({
       id: `tab-${tab}`, label: TAB_META[tab].title, group: 'Ekran', run: () => switchTab(tab),
     })),
-    ...(role === 'user' && activeTab === 'kolejka' ? [
+    ...(role === 'user' && activeQueue ? [
       { id: 'q-primary', label: 'Obsłużono, wezwij następną osobę', group: 'Akcja', run: () => runQueueCommand({ type: 'primary' }) },
       { id: 'q-noshow', label: 'Nie zgłosił się', group: 'Akcja', run: () => runQueueCommand({ type: 'noshow' }) },
       { id: 'q-pause', label: 'Wstrzymaj lub wznów zapisy', group: 'Akcja', run: () => runQueueCommand({ type: 'togglePause' }) },
@@ -277,7 +286,7 @@ export default function App() {
   } else {
     content =
       activeTab === 'strona_glowna' ? <UserHome ref={contentRef} locationIds={locationIds} currentUserId={currentUserId} onOpenQueue={openQueue} />
-      : activeTab === 'kolejka'     ? <UserQueue ref={contentRef} locationIds={locationIds} currentUserId={currentUserId} initialLocationId={intentId('kolejka')} />
+      : activeQueue                 ? <UserQueue ref={contentRef} locationIds={locationIds} currentUserId={currentUserId} locationId={activeQueue.id} />
       : activeTab === 'ustawienia'  ? <AdminSettings isOperator />
       : null;
   }
@@ -301,7 +310,7 @@ export default function App() {
           userName={userName}
           onLogout={handleLogout}
           onRefresh={() => contentRef.current?.refetch()}
-          waitingCount={waitingCount}
+          queues={queues}
           open={navOpen}
           onClose={() => setNavOpen(false)}
         />

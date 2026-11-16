@@ -8,7 +8,8 @@ import { sortByName } from '../lib/sort';
 import { SYSTEM_MORE_CONTRAST, SYSTEM_REDUCED_MOTION, useMediaQuery } from '../lib/theme';
 import { showToast } from './ui/useToast';
 import Button from './ui/Button';
-import { Field, Input } from './ui/Field';
+import { Field } from './ui/Field';
+import { PasswordInput } from './ui/PasswordInput';
 import Icon from './ui/Icon';
 import PasswordStrength from './ui/PasswordStrength';
 import Segmented from './ui/Segmented';
@@ -69,14 +70,14 @@ function ChangePasswordCard() {
           <div className="form-error" role="alert"><Icon name="alert" /><span>{formError}</span></div>
         )}
         <Field label="Obecne hasło">
-          <Input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" />
+          <PasswordInput value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" />
         </Field>
         <Field label="Nowe hasło" error={policyError} hint={`Co najmniej ${PASSWORD_MIN_LENGTH} znaków. Wielkie litery ani znaki specjalne nie są wymagane — im dłuższe hasło, tym lepiej.`}>
-          <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+          <PasswordInput value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
           <PasswordStrength password={newPassword} />
         </Field>
         <Field label="Powtórz nowe hasło" error={mismatch ? 'Hasła nie są identyczne. Wpisz nowe hasło jeszcze raz.' : null}>
-          <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+          <PasswordInput value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
         </Field>
         <div>
           <Button type="submit" variant="primary" disabled={!canSubmit}>
@@ -218,7 +219,7 @@ function QueueWorkCard() {
           </p>
         </div>
 
-        <Field label="Domyślna lokalizacja" hint="Ta kolejka otwiera się jako pierwsza po wejściu na ekran „Kolejka na żywo”.">
+        <Field label="Domyślna lokalizacja" hint="Ta kolejka otwiera się po kliknięciu „Otwórz kolejkę” na Pulpicie.">
           <Select
             value={prefs.default_location_id !== null ? String(prefs.default_location_id) : ''}
             onChange={v => save({ default_location_id: v ? Number(v) : null })}
@@ -254,11 +255,25 @@ function QueueWorkCard() {
 }
 
 export default function AdminSettings({ isOperator }: { isOperator: boolean }) {
+  const cards = [
+    <AppearanceCard key="appearance" />,
+    ...(isOperator ? [<QueueWorkCard key="queue" />] : []),
+    <ChangePasswordCard key="password" />,
+  ];
+  // Dwie niezależne kolumny (kolejne karty na przemian): nowa karta trafia pod kartę nad nią,
+  // a nie pod sąsiednią. Na wąskim ekranie kolumny znikają (display: contents), a --i przywraca kolejność.
+  const column = (parity: number) => (
+    <div className="settings-col">
+      {cards.map((card, i) => i % 2 === parity && (
+        <div key={card.key} className="settings-item" style={{ '--i': i } as React.CSSProperties}>{card}</div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="settings">
-      <AppearanceCard />
-      {isOperator && <QueueWorkCard />}
-      <ChangePasswordCard />
+      {column(0)}
+      {column(1)}
     </div>
   );
 }

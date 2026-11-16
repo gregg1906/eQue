@@ -1,12 +1,17 @@
 import { useEffect, useRef } from 'react';
 import Icon, { type IconName } from './Icon';
+import QueueLetter from './QueueLetter';
 import LiveIndicator from './LiveIndicator';
 import { useSessionRemaining } from '../../lib/session';
 
 export interface NavItem {
   key: string;
   label: string;
-  icon: IconName;
+  icon?: IconName;
+  /** Litera kolejki zamiast ikony. */
+  letter?: string;
+  /** Pełna etykieta dla czytnika ekranu (np. z liczbą czekających). */
+  ariaLabel?: string;
   /** Licznik po prawej, np. liczba czekających. */
   count?: number;
 }
@@ -103,10 +108,11 @@ export default function SideNav({ groups, activeTab, onSelect, userName, onLogou
                     type="button"
                     className="sidenav-item"
                     aria-current={active ? 'page' : undefined}
+                    aria-label={item.ariaLabel}
                     onClick={() => onSelect(item.key)}
                   >
-                    <Icon name={item.icon} />
-                    <span className="sidenav-item-label">{item.label}</span>
+                    {item.letter ? <QueueLetter letter={item.letter} size="sm" /> : item.icon && <Icon name={item.icon} />}
+                    <span className="sidenav-item-label" title={item.label}>{item.label}</span>
                     {item.count !== undefined && <span className="sidenav-count">{item.count}</span>}
                   </button>
                 );

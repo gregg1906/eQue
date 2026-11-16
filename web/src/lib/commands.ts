@@ -5,8 +5,7 @@
 export type QueueCommand =
   | { type: 'primary' }
   | { type: 'noshow' }
-  | { type: 'togglePause' }
-  | { type: 'select'; locationId: number };
+  | { type: 'togglePause' };
 
 const listeners = new Set<(cmd: QueueCommand) => void>();
 

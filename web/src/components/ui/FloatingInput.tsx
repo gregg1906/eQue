@@ -1,4 +1,5 @@
-import { forwardRef, useId } from 'react';
+import { forwardRef, useId, useState } from 'react';
+import { PasswordToggle } from './PasswordInput';
 
 interface FloatingInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'placeholder'> {
   label: string;
@@ -16,6 +17,10 @@ const FloatingInput = forwardRef<HTMLInputElement, FloatingInputProps>(function 
   const autoId = useId();
   const id = idProp ?? autoId;
   const hintId = hint ? `${id}-hint` : undefined;
+  const isPassword = rest.type === 'password';
+  const [shown, setShown] = useState(false);
+  const hasValue = String(rest.value ?? '').length > 0;
+  if (isPassword && !hasValue && shown) setShown(false); // puste pole: po ponownym wpisaniu znów zaczyna od ukrytego
 
   return (
     <div className="float-field">
@@ -26,10 +31,12 @@ const FloatingInput = forwardRef<HTMLInputElement, FloatingInputProps>(function 
           id={id}
           placeholder=" "
           aria-describedby={hintId}
-          className={className ? `input input-float ${className}` : 'input input-float'}
+          className={[className ? `input input-float ${className}` : 'input input-float', isPassword && 'pw-input'].filter(Boolean).join(' ')}
           {...rest}
+          type={isPassword && shown ? 'text' : rest.type}
         />
         <label className="float-label" htmlFor={id}>{label}</label>
+        {isPassword && hasValue && <PasswordToggle shown={shown} onToggle={() => setShown(v => !v)} />}
       </div>
       {hint && <span className="field-hint" id={hintId}>{hint}</span>}
     </div>

@@ -120,13 +120,15 @@ function pendingFinished(entries: Entry[], currentUserId: string): TicketHistory
 const UserQueue = forwardRef<RefreshHandle, {
   locationIds: number[];
   currentUserId: string;
-  initialLocationId?: number | null;
-}>(function UserQueue({ locationIds, currentUserId, initialLocationId = null }, ref) {
+  /** Wybrana kolejka — zakładka w menu bocznym (grupa „Kolejki”). */
+  locationId: number;
+}>(function UserQueue({ locationIds, currentUserId, locationId }, ref) {
   const [allLocations, setAllLocations] = useState<LocationResponse[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [queues, setQueues] = useState<Record<number, QueueResponse>>({});
-  const [chosenId, setChosenId] = useState<number | null>(initialLocationId);
   const [list, setList] = useState<'wait' | 'done'>('wait');
+  const [listFor, setListFor] = useState(locationId);
+  if (listFor !== locationId) { setListFor(locationId); setList('wait'); } // nowa kolejka zaczyna od listy oczekujących
   /** Komunikat dla czytnika ekranu o nowej osobie w wybranej kolejce. */
   const [arrival, setArrival] = useState<{ locationId: number; text: string } | null>(null);
   const prefs = usePreferences();
@@ -213,9 +215,7 @@ const UserQueue = forwardRef<RefreshHandle, {
   };
   const { entries, perform } = useQueueActions(afterSend);
 
-  // wybór operatora > domyślna lokalizacja z Ustawień > pierwsza alfabetycznie
-  const preferredId = chosenId ?? prefs.default_location_id;
-  const selectedId = preferredId !== null && available.some(l => l.id === preferredId) ? preferredId : available[0]?.id ?? null;
+  const selectedId = available.some(l => l.id === locationId) ? locationId : null;
   const rawLocation = available.find(l => l.id === selectedId) ?? null;
   const location = rawLocation ? applyLocationActions(rawLocation, entries) : null;
   const rawQueue = selectedId !== null ? queues[selectedId] : undefined;
@@ -253,22 +253,16 @@ const UserQueue = forwardRef<RefreshHandle, {
     );
   };
 
-  const selectLocation = (id: number) => {
-    setChosenId(id);
-    setList('wait');
-  };
-
   const shortcuts = prefs.single_key_shortcuts;
   useHotkeys({ Enter: primary, n: () => resolve('noshow'), p: togglePause }, !!location && !!queue && shortcuts);
 
-  const commandsRef = useRef({ primary, noshow: () => resolve('noshow'), togglePause, selectLocation });
-  useEffect(() => { commandsRef.current = { primary, noshow: () => resolve('noshow'), togglePause, selectLocation }; });
+  const commandsRef = useRef({ primary, noshow: () => resolve('noshow'), togglePause });
+  useEffect(() => { commandsRef.current = { primary, noshow: () => resolve('noshow'), togglePause }; });
   useEffect(() => onQueueCommand(cmd => {
     const c = commandsRef.current;
     if (cmd.type === 'primary') c.primary();
     else if (cmd.type === 'noshow') c.noshow();
     else if (cmd.type === 'togglePause') c.togglePause();
-    else if (cmd.type === 'select') c.selectLocation(cmd.locationId);
   }), []);
 
   // Dzisiejsza historia z serwera + akcje jeszcze w oknie „Cofnij”
@@ -300,22 +294,6 @@ const UserQueue = forwardRef<RefreshHandle, {
 
   return (
     <>
-      <Segmented
-        label="Lokalizacja"
-        value={selectedId ?? available[0].id}
-        onChange={selectLocation}
-        options={available.map((l, i) => {
-          const count = displayQueues[i]?.waiting.length;
-          return {
-            value: l.id,
-            letter: l.queue_code,
-            label: l.name,
-            count,
-            ariaLabel: count !== undefined ? `${l.queue_code} ${l.name}, czeka: ${count}` : `${l.queue_code} ${l.name}`,
-          };
-        })}
-      />
-
       {location && (
         <div className="console">
           <div className="console-main">

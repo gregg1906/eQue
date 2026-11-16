@@ -10,6 +10,7 @@ import Avatar from './ui/Avatar';
 import Button from './ui/Button';
 import Drawer from './ui/Drawer';
 import { Field, Input } from './ui/Field';
+import { PasswordInput } from './ui/PasswordInput';
 import Icon from './ui/Icon';
 import PasswordStrength from './ui/PasswordStrength';
 import Select from './ui/Select';
@@ -349,7 +350,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
             <Select value={newRole} onChange={v => setNewRole(v as Role)} options={ROLE_OPTIONS} />
           </Field>
           <Field label="Hasło" error={addErrors.password} hint={`Co najmniej ${PASSWORD_MIN_LENGTH} znaków. Przekaż je tej osobie — zmieni je w Ustawieniach.`}>
-            <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+            <PasswordInput value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
             <PasswordStrength password={newPassword} username={newUsername} />
           </Field>
           <button type="submit" hidden />
@@ -391,7 +392,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
               />
             </Field>
             <Field label="Nowe hasło" error={editErrors.password} hint={`Zostaw puste, żeby nie zmieniać. Nowe hasło: co najmniej ${PASSWORD_MIN_LENGTH} znaków. Zmiana hasła wylogowuje tę osobę ze wszystkich urządzeń.`}>
-              <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+              <PasswordInput value={editPassword} onChange={e => setEditPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
               <PasswordStrength password={editPassword} username={editUser.username} />
             </Field>
 

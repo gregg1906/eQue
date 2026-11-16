@@ -3,9 +3,20 @@ import { api } from './api';
 import { ws, type WsMessage } from './ws';
 import type { LocationResponse, QueueResponse } from './apiTypes';
 
-/** Łączna liczba czekających w aktywnych lokalizacjach operatora — licznik w menu przy „Kolejka na żywo”. */
-export function useWaitingTotal(locationIds: number[], enabled: boolean): number | undefined {
-  const [total, setTotal] = useState<number | undefined>(undefined);
+export interface QueueSummary {
+  id: number;
+  queue_code: string;
+  name: string;
+  /** Liczba czekających — liczba przy zakładce kolejki w menu. */
+  waiting: number;
+}
+
+/**
+  Aktywne lokalizacje operatora z liczbą czekających (zakładki w grupie „Kolejki”).
+  `undefined` do czasu pierwszego pobrania; potem odświeżane na żywo przez WebSocket.
+*/
+export function useQueueSummaries(locationIds: number[], enabled: boolean): QueueSummary[] | undefined {
+  const [summaries, setSummaries] = useState<QueueSummary[] | undefined>(undefined);
 
   useEffect(() => {
     if (!enabled || locationIds.length === 0) return;
@@ -14,10 +25,14 @@ export function useWaitingTotal(locationIds: number[], enabled: boolean): number
 
     const load = async () => {
       try {
+        // alfabetycznie po literze kolejki (A, B, C…), przy tej samej literze po nazwie
         const locs = (await api.get<LocationResponse[]>('/admin/locations'))
-          .filter(l => l.is_active && locationIds.includes(l.id));
+          .filter(l => l.is_active && locationIds.includes(l.id))
+          .sort((a, b) => a.queue_code.localeCompare(b.queue_code, 'pl') || a.name.localeCompare(b.name, 'pl'));
         const queues = await Promise.all(locs.map(l => api.get<QueueResponse>(`/admin/locations/${l.id}/queue`)));
-        if (!cancelled) setTotal(queues.reduce((sum, q) => sum + q.waiting.length, 0));
+        if (!cancelled) {
+          setSummaries(locs.map((l, i) => ({ id: l.id, queue_code: l.queue_code, name: l.name, waiting: queues[i].waiting.length })));
+        }
       } catch {
         // zostaw ostatnią znaną wartość
       }
@@ -44,5 +59,5 @@ export function useWaitingTotal(locationIds: number[], enabled: boolean): number
     };
   }, [locationIds, enabled]);
 
-  return enabled && locationIds.length > 0 ? total : undefined;
+  return enabled && locationIds.length > 0 ? summaries : undefined;
 }
