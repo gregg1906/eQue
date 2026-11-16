@@ -378,7 +378,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
             </div>
 
             <Field label="Nazwa urządzenia" hint="Np. miejsce, w którym stoi tablet.">
-              <Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="np. Tablet hol główny" />
+              <Input maxLength={100} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="np. Tablet hol główny" />
             </Field>
 
             <Field label="Lokalizacja" hint={!editing.is_active ? 'Aktywuj tablet, aby przypisać go do lokalizacji.' : undefined}>

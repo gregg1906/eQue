@@ -8,6 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -351,6 +352,13 @@ async def _record_login_failure(redis_client, keys: list[tuple[str, int]]) -> No
             await redis_client.expire(key, LOGIN_WINDOW_SECONDS)
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Nieobsłużony błąd: klient dostaje ogólny komunikat, szczegóły (stack trace) tylko w logu (Z5)."""
+    logger.exception("Nieobsłużony błąd: %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Wystąpił błąd serwera. Spróbuj ponownie później."})
+
+
 @app.post("/api/v1/auth/login", response_model=TokenResponse, tags=["Auth"])
 async def login(login_data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
@@ -491,6 +499,7 @@ async def me(current_user: models.User = Depends(get_current_user)):
 @app.post("/api/v1/auth/change-password", response_model=PasswordChangedResponse, tags=["Auth"])
 async def change_password(
     data: ChangePasswordRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -498,9 +507,18 @@ async def change_password(
     Samoobsługowa zmiana własnego hasła (ADMIN i OPERATOR).
     Wymaga podania obecnego hasła — w odróżnieniu od PUT /admin/users/{id},
     gdzie admin resetuje hasło komuś innemu bez jego znajomości.
+
+    Błędne obecne hasło to 400 (nie 401 — panel traktuje 401 jak koniec sesji) i liczy się do tego
+    samego limitu prób co logowanie: po przekroczeniu 429 z nagłówkiem Retry-After (Z6).
     """
+    redis_client = request.app.state.redis
+    limit_keys = _login_limit_keys(current_user.username, request)
+    await _check_login_limit(redis_client, limit_keys)
+
     if not verify_password(data.current_password, current_user.password_hash):
-        raise HTTPException(status_code=401, detail="Obecne hasło jest nieprawidłowe")
+        await _record_login_failure(redis_client, limit_keys)
+        raise HTTPException(status_code=400, detail="Obecne hasło jest nieprawidłowe")
+    await redis_client.delete(limit_keys[0][0])
 
     error = validate_password(data.new_password, current_user.username)
     if error:
@@ -946,6 +964,38 @@ def _get_ticket_or_404(ticket_id: str, db: Session) -> models.Ticket:
     return ticket
 
 
+# Limit nieudanych prób na adres IP dla publicznych endpointów kolejki (Z7): kod zapisu ma tylko
+# 10 000 wartości, a kod biletu jest widoczny na ekranie. Liczymy tylko próby nieudane (zły kod).
+PUBLIC_WINDOW_SECONDS = int(os.getenv("PUBLIC_FAIL_WINDOW_SECONDS", "300"))
+PUBLIC_MAX_FAILS = int(os.getenv("PUBLIC_MAX_FAILS", "10"))
+
+
+def _public_fail_key(scope: str, request: Request) -> str:
+    ip = request.client.host if request.client else "unknown"
+    return f"public_fail:{scope}:{ip}"
+
+
+async def _check_public_limit(request: Request, scope: str) -> None:
+    redis_client = request.app.state.redis
+    key = _public_fail_key(scope, request)
+    fails = await redis_client.get(key)
+    if fails is not None and int(fails) >= PUBLIC_MAX_FAILS:
+        ttl = max(await redis_client.ttl(key), 1)
+        minutes = -(-ttl // 60)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Zbyt wiele nieudanych prób. Spróbuj ponownie za {minutes} min.",
+            headers={"Retry-After": str(ttl)},
+        )
+
+
+async def _record_public_failure(request: Request, scope: str) -> None:
+    redis_client = request.app.state.redis
+    key = _public_fail_key(scope, request)
+    if await redis_client.incr(key) == 1:
+        await redis_client.expire(key, PUBLIC_WINDOW_SECONDS)
+
+
 @app.post("/api/v1/queue/join", response_model=JoinQueueResponse, status_code=201, tags=["Patient"])
 async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = Depends(get_db)):
     """
@@ -954,8 +1004,10 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
     na location_id. Tworzy Ticket(status=WAITING) z kodem <queue_code><numer_dnia>,
     np. "A01", wylicza pozycję i szacowany czas.
     """
+    await _check_public_limit(request, "join")
     location_id_raw = await request.app.state.redis.get(f"signup_lookup:{payload.signup_code.strip()}")
     if not location_id_raw:
+        await _record_public_failure(request, "join")
         raise HTTPException(status_code=404, detail="Nieprawidłowy lub wygasły kod zapisu")
 
     # SELECT … FOR UPDATE: równoległe zapisy do tej samej lokalizacji czekają tu na siebie
@@ -1083,15 +1135,20 @@ async def patient_cancel_ticket(
     zapytanie bez sortowania mogło od drugiego dnia trafić we wczorajszy bilet
     o tym samym kodzie i zwrócić 400 zamiast anulować dzisiejszy.
     """
+    await _check_public_limit(request, "cancel")
+    ticket = None
     if payload.ticket_id:
         ticket = _get_ticket_or_404(payload.ticket_id, db)
         if payload.ticket_code and ticket.ticket_code != payload.ticket_code.strip().upper():
+            await _record_public_failure(request, "cancel")
             raise HTTPException(status_code=404, detail="Bilet nie został znaleziony")
     elif payload.ticket_code:
         ticket = _find_ticket_by_code(payload.ticket_code, db)
     else:
         raise HTTPException(status_code=422, detail="Podaj ticket_code albo ticket_id")
-    if not ticket:
+    # tylko bilety z dzisiejszego dnia placówki (Z7) — wczorajszy bilet o tym samym kodzie nie jest celem
+    if not ticket or ticket.service_date != local_today():
+        await _record_public_failure(request, "cancel")
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     if ticket.status != "WAITING":

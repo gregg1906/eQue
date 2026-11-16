@@ -36,7 +36,13 @@ export function notifyUnauthorized() {
 export async function errorDetail(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    if (body?.detail) return typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+    if (typeof body?.detail === 'string') return body.detail;
+    // błąd walidacji (422): lista { loc, msg } → pierwszy komunikat zamiast surowego JSON-a
+    if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
+      const field = body.detail[0].loc?.at(-1);
+      return field ? `Niepoprawna wartość pola „${field}”: ${body.detail[0].msg}` : String(body.detail[0].msg);
+    }
+    if (body?.detail) return JSON.stringify(body.detail);
   } catch {
     // odpowiedź nie była JSON-em — zostaje statusText
   }

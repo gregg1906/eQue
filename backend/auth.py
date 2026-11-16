@@ -57,7 +57,11 @@ def get_db():
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Sprawdza czy hasło z Reacta pasuje do hasha w bazie."""
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    encoded = plain_password.encode("utf-8")
+    if len(encoded) > 72:
+        # bcrypt 5 rzuca wyjątek dla haseł dłuższych niż 72 bajty; takiego hasła nie dało się ustawić
+        return False
+    return bcrypt.checkpw(encoded, hashed_password.encode("utf-8"))
 
 
 def hash_password(plain_password: str) -> str:

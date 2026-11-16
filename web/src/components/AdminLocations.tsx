@@ -362,10 +362,10 @@ const AdminLocations = forwardRef<RefreshHandle, {
       >
         <form className="contents" onSubmit={handleAddLocation}>
           <Field label="Nazwa lokalizacji" error={addError}>
-            <Input value={newName} onChange={e => { setNewName(e.target.value); setAddError(null); }} placeholder="np. Gabinet 12" />
+            <Input maxLength={100} value={newName} onChange={e => { setNewName(e.target.value); setAddError(null); }} placeholder="np. Gabinet 12" />
           </Field>
           <Field label="Opis (opcjonalnie)" hint="Widoczny dla operatorów, np. piętro i skrzydło.">
-            <Textarea rows={2} value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="np. Piętro 1, skrzydło wschodnie" />
+            <Textarea rows={2} maxLength={255} value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder="np. Piętro 1, skrzydło wschodnie" />
           </Field>
           <div className="note">
             <Icon name="info" />
@@ -396,11 +396,11 @@ const AdminLocations = forwardRef<RefreshHandle, {
             </div>
 
             <Field label="Nazwa lokalizacji" error={editError}>
-              <Input value={draft.name} onChange={e => { setDraft({ ...draft, name: e.target.value }); setEditError(null); }} />
+              <Input maxLength={100} value={draft.name} onChange={e => { setDraft({ ...draft, name: e.target.value }); setEditError(null); }} />
             </Field>
 
             <Field label="Opis" hint="Widoczny dla operatorów, np. piętro i skrzydło.">
-              <Textarea rows={2} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
+              <Textarea rows={2} maxLength={255} value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })} />
             </Field>
 
             {draft.is_active ? (

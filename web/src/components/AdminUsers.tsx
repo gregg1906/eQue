@@ -347,13 +347,13 @@ const AdminUsers = forwardRef<RefreshHandle, {
       >
         <form className="contents" onSubmit={handleAdd}>
           <Field label="Imię i nazwisko" error={addErrors.fullName}>
-            <Input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="np. Anna Nowak" autoComplete="off" />
+            <Input maxLength={120} value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="np. Anna Nowak" autoComplete="off" />
           </Field>
           <Field label="Login" error={addErrors.username} hint="Bez spacji, np. anna.nowak.">
-            <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="np. anna.nowak" autoComplete="off" />
+            <Input maxLength={50} value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="np. anna.nowak" autoComplete="off" />
           </Field>
           <Field label="Stanowisko (opcjonalnie)">
-            <Input value={newPosition} onChange={e => setNewPosition(e.target.value)} placeholder="np. Rejestratorka" />
+            <Input maxLength={120} value={newPosition} onChange={e => setNewPosition(e.target.value)} placeholder="np. Rejestratorka" />
           </Field>
           <Field label="Rola">
             <Select value={newRole} onChange={v => setNewRole(v as Role)} options={ROLE_OPTIONS} />
@@ -382,13 +382,13 @@ const AdminUsers = forwardRef<RefreshHandle, {
         {editUser && (
           <form className="contents" onSubmit={handleSaveEdit}>
             <Field label="Imię i nazwisko" error={editErrors.fullName}>
-              <Input value={editUser.full_name} onChange={e => setEditUser({ ...editUser, full_name: e.target.value })} />
+              <Input maxLength={120} value={editUser.full_name} onChange={e => setEditUser({ ...editUser, full_name: e.target.value })} />
             </Field>
             <Field label="Login" error={editErrors.username}>
-              <Input value={editUser.username} onChange={e => setEditUser({ ...editUser, username: e.target.value })} autoComplete="off" />
+              <Input maxLength={50} value={editUser.username} onChange={e => setEditUser({ ...editUser, username: e.target.value })} autoComplete="off" />
             </Field>
             <Field label="Stanowisko">
-              <Input value={editUser.position ?? ''} onChange={e => setEditUser({ ...editUser, position: e.target.value })} placeholder="np. Rejestratorka" />
+              <Input maxLength={120} value={editUser.position ?? ''} onChange={e => setEditUser({ ...editUser, position: e.target.value })} placeholder="np. Rejestratorka" />
             </Field>
             <Field label="Rola">
               <Select

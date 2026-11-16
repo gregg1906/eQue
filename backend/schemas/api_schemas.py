@@ -1,6 +1,12 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, Optional
 import uuid
+
+# Limity zgodne z kolumnami bazy (models.py) — za długa wartość daje czytelne 422, a nie błąd 500 z bazy (Z5).
+# Schematy z panelu admina odrzucają nieznane pola (extra="forbid"). Schematy publiczne używane przez
+# aplikację mobilną (JoinQueueRequest, PatientCancelRequest) zostają łagodne wobec dodatkowych pól.
+LOGIN_PATTERN = r"^[\w.@-]+$"
+STRICT = ConfigDict(extra="forbid")
 
 
 class KioskStatusResponse(BaseModel):
@@ -32,9 +38,9 @@ class JoinQueueRequest(BaseModel):
     odświeżany co 30s. To NIE stała litera lokalizacji (queue_code) — ta służy
     już tylko jako informacja na kiosku/w ticket_code, nie da się nią dołączyć.
     """
-    signup_code: str
-    customer_name: Optional[str] = None
-    appointment_time: Optional[str] = None
+    signup_code: str = Field(max_length=16)
+    customer_name: Optional[str] = Field(default=None, max_length=120)
+    appointment_time: Optional[str] = Field(default=None, max_length=20)
 
 class JoinQueueResponse(BaseModel):
     """Odpowiedź po dołączeniu do kolejki."""
@@ -50,8 +56,8 @@ class PatientCancelRequest(BaseModel):
     `ticket_id` (z odpowiedzi /queue/join) wskazuje bilet jednoznacznie; sam
     `ticket_code` oznacza najnowszy bilet o tym kodzie (kody powtarzają się co dzień).
     """
-    ticket_code: Optional[str] = None
-    ticket_id: Optional[str] = None
+    ticket_code: Optional[str] = Field(default=None, max_length=10)
+    ticket_id: Optional[str] = Field(default=None, max_length=64)
 
 class TicketStatusResponse(BaseModel):
     """
@@ -97,13 +103,17 @@ class QueueResponse(BaseModel):
 
 class TabletCreate(BaseModel):
     """Body POST /admin/tablets."""
-    name: str
+    name: str = Field(max_length=100)
     location_id: Optional[int] = None
+
+    model_config = STRICT
 
 class TabletUpdate(BaseModel):
     """Body PUT /admin/tablets/{id} — wszystkie pola opcjonalne."""
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=100)
     location_id: Optional[int] = None
+
+    model_config = STRICT
 
 class TabletResponse(BaseModel):
     """Odpowiedź dla pojedynczego tabletu."""
@@ -128,19 +138,21 @@ class TabletInLocation(BaseModel):
 
 class LocationCreate(BaseModel):
     """Body POST /admin/locations."""
-    name: str
-    description: Optional[str] = None
-    category: str = "Ogólna"
+    name: str = Field(min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=255)
+    category: str = Field(default="Ogólna", min_length=1, max_length=100)
+
+    model_config = STRICT
 
 class LocationUpdate(BaseModel):
     """Body PUT /admin/locations/{id} — wszystkie pola opcjonalne."""
-    name: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=255)
+    category: Optional[str] = Field(default=None, min_length=1, max_length=100)
     tablet_id: Optional[int] = None
-    user_ids: Optional[list[uuid.UUID]] = None
+    user_ids: Optional[list[uuid.UUID]] = Field(default=None, max_length=1000)
 
-    model_config = ConfigDict(extra="allow")
+    model_config = STRICT
 
 class LocationResponse(BaseModel):
     """Odpowiedź dla pojedynczej lokalizacji."""
@@ -158,13 +170,16 @@ class LocationResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=50)
+    # Limit chroni przed ogromnym ładunkiem; bcrypt i tak widzi tylko 72 bajty (patrz auth.verify_password)
+    password: str = Field(max_length=256)
 
 class ChangePasswordRequest(BaseModel):
     """Body POST /auth/change-password — samoobsługowa zmiana własnego hasła."""
-    current_password: str
-    new_password: str
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(max_length=256)
+
+    model_config = STRICT
 
 class PasswordChangedResponse(BaseModel):
     """Odpowiedź POST /auth/change-password. Zmiana hasła unieważnia dotychczasowe tokeny konta,
@@ -195,21 +210,25 @@ class MeResponse(BaseModel):
 
 class UserCreate(BaseModel):
     """Body POST /admin/users."""
-    username: str
-    full_name: str
-    password: str
-    role: str = "OPERATOR"
-    position: Optional[str] = None
-    location_ids: list[int] = []
+    username: str = Field(min_length=3, max_length=50, pattern=LOGIN_PATTERN)
+    full_name: str = Field(min_length=1, max_length=120)
+    password: str = Field(max_length=256)  # reguły hasła: password_policy.py
+    role: str = Field(default="OPERATOR", max_length=20)
+    position: Optional[str] = Field(default=None, max_length=120)
+    location_ids: list[int] = Field(default=[], max_length=1000)
+
+    model_config = STRICT
 
 class UserUpdate(BaseModel):
     """Body PUT /admin/users/{id} — wszystkie pola opcjonalne."""
-    username: Optional[str] = None
-    full_name: Optional[str] = None
-    position: Optional[str] = None
-    role: Optional[str] = None
-    password: Optional[str] = None
-    location_ids: Optional[list[int]] = None
+    username: Optional[str] = Field(default=None, min_length=3, max_length=50, pattern=LOGIN_PATTERN)
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    position: Optional[str] = Field(default=None, max_length=120)
+    role: Optional[str] = Field(default=None, max_length=20)
+    password: Optional[str] = Field(default=None, max_length=256)
+    location_ids: Optional[list[int]] = Field(default=None, max_length=1000)
+
+    model_config = STRICT
 
 class UserResponse(BaseModel):
     """Odpowiedź dla pojedynczego użytkownika (lista i szczegóły)."""
