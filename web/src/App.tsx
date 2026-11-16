@@ -51,8 +51,8 @@ function meToSession(me: MeResponse): Session {
   };
 }
 
-function homeTab(role: Role) {
-  return role === 'admin' ? 'strona_glowna' : 'kolejka';
+function homeTab() {
+  return 'strona_glowna';
 }
 
 const TAB_META: Record<string, { title: string; action: string | null }> = {
@@ -65,7 +65,7 @@ const TAB_META: Record<string, { title: string; action: string | null }> = {
 };
 
 const ADMIN_TABS = ['strona_glowna', 'lokalizacje', 'tablety', 'uzytkownicy', 'ustawienia'];
-const USER_TABS = ['kolejka', 'strona_glowna', 'ustawienia'];
+const USER_TABS = ['strona_glowna', 'kolejka', 'ustawienia'];
 const NO_LOCATIONS: number[] = [];
 
 const SESSION_EXPIRED = 'Twoja sesja wygasła. Zaloguj się ponownie, żeby kontynuować pracę.';
@@ -114,7 +114,7 @@ export default function App() {
         .then(me => {
           const s = meToSession(me);
           setSession(s);
-          setActiveTab(homeTab(s.role));
+          setActiveTab(homeTab());
         })
         .catch(err => {
           clearToken();
@@ -220,7 +220,7 @@ export default function App() {
     const s = meToSession(me);
     setLoginNotice(null);
     setSession(s);
-    setActiveTab(homeTab(s.role));
+    setActiveTab(homeTab());
   };
 
   const handleLogout = () => endSession(null);

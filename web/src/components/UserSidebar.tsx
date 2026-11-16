@@ -19,8 +19,8 @@ export default function UserSidebar({ activeTab, setActiveTab, userName, onLogou
       groups={[
         {
           items: [
-            { key: 'kolejka', label: 'Kolejka na żywo', icon: 'queue', count: waitingCount },
             { key: 'strona_glowna', label: 'Pulpit', icon: 'grid' },
+            { key: 'kolejka', label: 'Kolejka na żywo', icon: 'queue', count: waitingCount },
           ],
         },
         { label: 'Konto', items: [{ key: 'ustawienia', label: 'Ustawienia', icon: 'cog' }] },
