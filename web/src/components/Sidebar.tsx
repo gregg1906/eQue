@@ -31,7 +31,6 @@ export default function Sidebar({ activeTab, setActiveTab, userName, onLogout, o
       activeTab={activeTab}
       onSelect={setActiveTab}
       userName={userName}
-      roleLabel="Administrator"
       onLogout={onLogout}
       onRefresh={onRefresh}
       open={open}

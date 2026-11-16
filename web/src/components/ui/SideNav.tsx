@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import Avatar from './Avatar';
 import Icon, { type IconName } from './Icon';
 import LiveIndicator from './LiveIndicator';
 import { useSessionRemaining } from '../../lib/session';
@@ -64,12 +63,11 @@ function SessionTimer() {
   );
 }
 
-export default function SideNav({ groups, activeTab, onSelect, userName, roleLabel, onLogout, onRefresh, open, onClose, label }: {
+export default function SideNav({ groups, activeTab, onSelect, userName, onLogout, onRefresh, open, onClose, label }: {
   groups: NavGroup[];
   activeTab: string;
   onSelect: (key: string) => void;
   userName: string;
-  roleLabel: string;
   onLogout: () => void;
   onRefresh?: () => Promise<void> | void;
   /** Stan panelu na wąskim ekranie. */
@@ -117,20 +115,20 @@ export default function SideNav({ groups, activeTab, onSelect, userName, roleLab
           ))}
         </nav>
 
-        <div className="sidenav-status">
-          <LiveIndicator onRefresh={onRefresh} />
-          <SessionTimer />
-        </div>
-
-        <div className="sidenav-user">
-          <Avatar name={userName} online />
-          <div className="sidenav-who">
-            <b>{userName}</b>
-            <span>{roleLabel}</span>
+        <div className="sidenav-foot">
+          <div className="sidenav-status">
+            <LiveIndicator onRefresh={onRefresh} />
+            <SessionTimer />
           </div>
-          <button type="button" className="icon-btn" onClick={onLogout} aria-label="Wyloguj" title="Wyloguj">
-            <Icon name="out" />
-          </button>
+
+          <div className="sidenav-user">
+            <div className="sidenav-who">
+              <b title={userName}>{userName}</b>
+            </div>
+            <button type="button" className="icon-btn" onClick={onLogout} aria-label="Wyloguj" title="Wyloguj">
+              <Icon name="out" />
+            </button>
+          </div>
         </div>
       </aside>
     </>

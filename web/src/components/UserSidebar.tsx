@@ -28,7 +28,6 @@ export default function UserSidebar({ activeTab, setActiveTab, userName, onLogou
       activeTab={activeTab}
       onSelect={setActiveTab}
       userName={userName}
-      roleLabel="Operator"
       onLogout={onLogout}
       onRefresh={onRefresh}
       open={open}
