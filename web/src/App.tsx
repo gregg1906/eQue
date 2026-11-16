@@ -130,6 +130,9 @@ export default function App() {
 
   /** Kończy sesję: zamyka panele, czyści token i (opcjonalnie) zostawia komunikat na ekranie logowania. */
   const endSession = useCallback((notice: string | null) => {
+    // Wylogowanie z serwera (Z3): unieważnia token, a nie tylko usuwa go z przeglądarki.
+    // Przy wygasłej sesji (notice) token i tak jest już odrzucony, więc wołamy tylko przy świadomym wylogowaniu.
+    if (notice === null && getToken()) void api.post('/auth/logout').catch(() => {});
     setSession(null);
     setPaletteOpen(false);
     setNavOpen(false);

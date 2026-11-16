@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validatePassword } from '../lib/passwordPolicy';
 import { sortByName } from '../lib/sort';
 import type { UserResponse, LocationResponse, Role, RefreshHandle } from '../lib/apiTypes';
 import { confirmDialog } from '../lib/dialog-actions';
@@ -10,6 +11,7 @@ import Button from './ui/Button';
 import Drawer from './ui/Drawer';
 import { Field, Input } from './ui/Field';
 import Icon from './ui/Icon';
+import PasswordStrength from './ui/PasswordStrength';
 import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import StatusPill from './ui/StatusPill';
@@ -110,6 +112,10 @@ const AdminUsers = forwardRef<RefreshHandle, {
     if (!newUsername.trim()) errors.username = 'Wpisz login, np. anna.nowak.';
     else if (/\s/.test(newUsername.trim())) errors.username = 'Login nie może zawierać spacji. Użyj kropki, np. jan.kowalski.';
     if (!newPassword) errors.password = 'Ustal hasło, którym ta osoba zaloguje się pierwszy raz.';
+    else {
+      const policyError = validatePassword(newPassword, newUsername);
+      if (policyError) errors.password = policyError;
+    }
     setAddErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -138,7 +144,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
   const [editUser, setEditUser] = useState<UserResponse | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editPassword, setEditPassword] = useState('');
-  const [editErrors, setEditErrors] = useState<{ fullName?: string; username?: string }>({});
+  const [editErrors, setEditErrors] = useState<{ fullName?: string; username?: string; password?: string }>({});
   const [saving, setSaving] = useState(false);
 
   const openEdit = (user: UserResponse) => {
@@ -151,9 +157,13 @@ const AdminUsers = forwardRef<RefreshHandle, {
   const handleSaveEdit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!editUser) return;
-    const errors: { fullName?: string; username?: string } = {};
+    const errors: { fullName?: string; username?: string; password?: string } = {};
     if (!editUser.full_name.trim()) errors.fullName = 'Imię i nazwisko nie może być puste.';
     if (!editUser.username.trim()) errors.username = 'Login nie może być pusty.';
+    if (editPassword.trim() !== '') {
+      const policyError = validatePassword(editPassword, editUser.username);
+      if (policyError) errors.password = policyError;
+    }
     setEditErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -348,8 +358,9 @@ const AdminUsers = forwardRef<RefreshHandle, {
           <Field label="Rola">
             <Select value={newRole} onChange={v => setNewRole(v as Role)} options={ROLE_OPTIONS} />
           </Field>
-          <Field label="Hasło" error={addErrors.password} hint="Przekaż je tej osobie — zmieni je w Ustawieniach.">
-            <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" />
+          <Field label="Hasło" error={addErrors.password} hint={`Co najmniej ${PASSWORD_MIN_LENGTH} znaków. Przekaż je tej osobie — zmieni je w Ustawieniach.`}>
+            <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+            <PasswordStrength password={newPassword} username={newUsername} />
           </Field>
           <button type="submit" hidden />
         </form>
@@ -389,8 +400,9 @@ const AdminUsers = forwardRef<RefreshHandle, {
                 options={ROLE_OPTIONS}
               />
             </Field>
-            <Field label="Nowe hasło" hint="Zostaw puste, żeby nie zmieniać.">
-              <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} autoComplete="new-password" />
+            <Field label="Nowe hasło" error={editErrors.password} hint={`Zostaw puste, żeby nie zmieniać. Nowe hasło: co najmniej ${PASSWORD_MIN_LENGTH} znaków. Zmiana hasła wylogowuje tę osobę ze wszystkich urządzeń.`}>
+              <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+              <PasswordStrength password={editPassword} username={editUser.username} />
             </Field>
 
             {editUser.role === 'OPERATOR' ? (

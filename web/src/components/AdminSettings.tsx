@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, setToken } from '../lib/api';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validatePassword } from '../lib/passwordPolicy';
 import type { LocationResponse, TextSize, ThemePreference, UndoSeconds, UserPreferences } from '../lib/apiTypes';
 import { updatePreferences, usePreferences } from '../lib/preferences';
 import { playChime } from '../lib/sound';
@@ -9,6 +10,7 @@ import { showToast } from './ui/useToast';
 import Button from './ui/Button';
 import { Field, Input } from './ui/Field';
 import Icon from './ui/Icon';
+import PasswordStrength from './ui/PasswordStrength';
 import Segmented from './ui/Segmented';
 import Select from './ui/Select';
 import Switch from './ui/Switch';
@@ -32,9 +34,9 @@ function ChangePasswordCard() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const tooShort = newPassword.length > 0 && newPassword.length < 6;
+  const policyError = newPassword.length > 0 ? validatePassword(newPassword) : null;
   const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
-  const canSubmit = currentPassword.length > 0 && newPassword.length >= 6 && newPassword === confirmPassword && !submitting;
+  const canSubmit = currentPassword.length > 0 && newPassword.length > 0 && !policyError && newPassword === confirmPassword && !submitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +44,9 @@ function ChangePasswordCard() {
     setSubmitting(true);
     setFormError(null);
     try {
-      await api.post('/auth/change-password', { current_password: currentPassword, new_password: newPassword });
+      const res = await api.post<{ access_token: string }>('/auth/change-password', { current_password: currentPassword, new_password: newPassword });
+      // zmiana hasła unieważnia stare tokeny — serwer zwraca nowy, żeby ta sesja trwała
+      setToken(res.access_token);
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
       showToast('Zmieniono hasło. Użyj go przy następnym logowaniu.');
     } catch (err) {
@@ -67,11 +71,12 @@ function ChangePasswordCard() {
         <Field label="Obecne hasło">
           <Input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" />
         </Field>
-        <Field label="Nowe hasło" error={tooShort ? 'Nowe hasło musi mieć co najmniej 6 znaków.' : null} hint="Co najmniej 6 znaków.">
-          <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" />
+        <Field label="Nowe hasło" error={policyError} hint={`Co najmniej ${PASSWORD_MIN_LENGTH} znaków. Wielkie litery ani znaki specjalne nie są wymagane — im dłuższe hasło, tym lepiej.`}>
+          <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
+          <PasswordStrength password={newPassword} />
         </Field>
         <Field label="Powtórz nowe hasło" error={mismatch ? 'Hasła nie są identyczne. Wpisz nowe hasło jeszcze raz.' : null}>
-          <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+          <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
         </Field>
         <div>
           <Button type="submit" variant="primary" disabled={!canSubmit}>

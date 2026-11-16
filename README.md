@@ -35,7 +35,7 @@ Cache / Pub-Sub - Redis (WebSockety na żywo + rotujące kody zapisu do kolejki)
 Cała infrastruktura bazodanowa, Redis oraz aplikacje frontendowa (React) i mobilna (Flutter Web) są zintegrowane w jednym pliku Docker Compose. Obie działają w trybie Hot Reload — zmiany w kodzie odświeżają się automatycznie (dla Flutter wymaga to restartu kontenera `mobile`, patrz niżej).
 
 ### Konfiguracja (opcjonalnie)
-Hasło do bazy, klucz JWT i strefę czasową placówki można ustawić w pliku `.env` (wzór: `.env.example`, plik `.env` nie trafia do repozytorium). Bez niego działają domyślne ustawienia deweloperskie — na serwerze produkcyjnym trzeba ustawić własne.
+Skopiuj `.env.example` do `.env` (plik `.env` nie trafia do repozytorium) i ustaw: `JWT_SECRET_KEY` (**wymagany**, min. 32 bajty — bez niego backend nie startuje; do lokalnych testów można zamiast tego ustawić `APP_ENV=dev`), `ADMIN_INITIAL_PASSWORD` (hasło pierwszego administratora, min. 12 znaków) oraz opcjonalnie `SEED_DEMO_DATA=1`, żeby dodać konta testowe, lokalizacje i bilety z poniższej sekcji 4. Hasło do bazy i strefę czasową placówki też ustawia się w `.env`.
 
 ### Pierwsze uruchomienie (zbudowanie obrazów, budowanie backendu, seedowanie bazy):
 ```bash
@@ -68,6 +68,8 @@ docker-compose restart mobile
 ---
 
 ## 4. Konta testowe (dane z seeda)
+
+Konta poniżej powstają **tylko** przy `SEED_DEMO_DATA=1`. Konto `admin` ma wtedy hasło z `ADMIN_INITIAL_PASSWORD`, a gdy go nie ustawisz — `admin123`. Bez tej zmiennej na pustej bazie powstaje wyłącznie administrator z `ADMIN_INITIAL_PASSWORD`. Nowe hasła (zmiana, reset, nowe konto) muszą spełniać politykę haseł: min. 12 znaków, najwyżej 64, nie z listy popularnych i nie takie jak login.
 
 **Panel webowy:**
 

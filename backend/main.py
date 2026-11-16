@@ -1,7 +1,7 @@
 import os
 import json
 import uuid
-import random
+import secrets
 import string
 import asyncio
 import logging
@@ -15,8 +15,10 @@ import redis.asyncio as aioredis
 import models
 from auth import (
     verify_password, create_access_token, hash_password, get_current_user, get_db,
+    bump_token_version, revoke_token, authenticate_token, TokenError, bearer_scheme,
     require_admin, ensure_location_access, VALID_ROLES, ROLE_ADMIN,
 )
+from password_policy import validate_password
 from ws import manager as ws_manager, redis_pubsub_listener, publish_event, REDIS_CHANNEL
 
 from datetime import date, datetime, timezone
@@ -26,7 +28,7 @@ from schemas.api_schemas import (
     KioskStatusResponse, SignupCodeResponse, JoinQueueRequest, JoinQueueResponse, PatientCancelRequest,
     TicketStatusResponse,
     TabletCreate, TabletUpdate, TabletResponse,
-    LoginRequest, TokenResponse, MeResponse, ChangePasswordRequest,
+    LoginRequest, TokenResponse, MeResponse, ChangePasswordRequest, PasswordChangedResponse,
     UserCreate, UserUpdate, UserResponse,
     LocationCreate, LocationUpdate, LocationResponse, TabletInLocation,
     TicketResponse, QueueResponse, TicketHistoryEntry,
@@ -186,7 +188,7 @@ def _generate_pairing_token(db: Session) -> str:
     """Generuje unikalny, czytelny token parowania tabletu (do ręcznego wpisania w apce mobilnej)."""
     for _ in range(10):
         token = "-".join(
-            "".join(random.choices(_UNAMBIGUOUS_ALPHABET, k=4)) for _ in range(2)
+            "".join(secrets.choice(_UNAMBIGUOUS_ALPHABET) for _ in range(4)) for _ in range(2)
         )
         collision = db.query(models.Tablet).filter(models.Tablet.pairing_token == token).first()
         if not collision:
@@ -375,7 +377,7 @@ async def login(login_data: LoginRequest, request: Request, db: Session = Depend
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Konto jest nieaktywne")
 
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(user)
 
     return {
         "access_token": access_token,
@@ -395,12 +397,26 @@ async def refresh_token(current_user: models.User = Depends(get_current_user)):
     (401) — wtedy trzeba zalogować się ponownie. Dezaktywowane konto też dostaje 401.
     """
     return {
-        "access_token": create_access_token(data={"sub": current_user.username}),
+        "access_token": create_access_token(current_user),
         "token_type": "bearer",
         "id": current_user.id,
         "role": current_user.role,
         "full_name": current_user.full_name,
     }
+
+
+@app.post("/api/v1/auth/logout", status_code=204, tags=["Auth"])
+async def logout(
+    request: Request,
+    credentials=Depends(bearer_scheme),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Kończy sesję po stronie serwera: identyfikator (jti) bieżącego tokenu trafia do Redisa
+    do czasu jego wygaśnięcia, więc skradziony albo zapomniany token przestaje działać.
+    Inne sesje tego konta (inne tokeny) zostają nietknięte.
+    """
+    await revoke_token(request.app.state.redis, credentials.credentials)
 
 
 def _read_preferences(user: models.User) -> UserPreferences:
@@ -472,7 +488,7 @@ async def me(current_user: models.User = Depends(get_current_user)):
     )
 
 
-@app.post("/api/v1/auth/change-password", tags=["Auth"])
+@app.post("/api/v1/auth/change-password", response_model=PasswordChangedResponse, tags=["Auth"])
 async def change_password(
     data: ChangePasswordRequest,
     db: Session = Depends(get_db),
@@ -486,13 +502,16 @@ async def change_password(
     if not verify_password(data.current_password, current_user.password_hash):
         raise HTTPException(status_code=401, detail="Obecne hasło jest nieprawidłowe")
 
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=422, detail="Nowe hasło musi mieć co najmniej 6 znaków")
+    error = validate_password(data.new_password, current_user.username)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
 
     current_user.password_hash = hash_password(data.new_password)
+    # zmiana hasła unieważnia wszystkie dotychczasowe tokeny (także skradzione); ta sesja dostaje nowy
+    bump_token_version(current_user)
     db.commit()
 
-    return {"message": "Hasło zostało zmienione."}
+    return {"message": "Hasło zostało zmienione.", "access_token": create_access_token(current_user)}
 
 
 @app.get("/api/v1/kiosk/status", response_model=KioskStatusResponse, tags=["Tablet"])
@@ -549,7 +568,7 @@ async def _generate_signup_code(redis_client, location_id: int) -> str:
 
     code = None
     for _ in range(10):
-        candidate = "".join(random.choices(_SIGNUP_CODE_ALPHABET, k=4))
+        candidate = "".join(secrets.choice(_SIGNUP_CODE_ALPHABET) for _ in range(4))
         if not await redis_client.get(f"signup_lookup:{candidate}"):
             code = candidate
             break
@@ -764,31 +783,42 @@ async def websocket_endpoint(
         await _reject_websocket(websocket, WS_CLOSE_UNAUTHORIZED)
         return
 
-    import jwt as _jwt
-    from auth import SECRET_KEY, ALGORITHM
-
-    try:
-        payload = _jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        if not username:
-            await _reject_websocket(websocket, WS_CLOSE_UNAUTHORIZED)
-            return
-    except _jwt.PyJWTError:
-        # obejmuje też ExpiredSignatureError — panel po kodzie 4001 kończy sesję zamiast łączyć się w kółko
-        await _reject_websocket(websocket, WS_CLOSE_UNAUTHORIZED)
-        return
-
+    redis_client = websocket.app.state.redis
     db = SessionLocal()
     try:
-        user = db.query(models.User).filter(models.User.username == username).first()
-        if not user or not user.is_active:
-            await _reject_websocket(websocket, WS_CLOSE_FORBIDDEN)
+        try:
+            user = await authenticate_token(token, db, redis_client)
+        except TokenError as exc:
+            # wygasły/nieważny/unieważniony token → 4001 (panel kończy sesję zamiast łączyć się w kółko),
+            # konto nieaktywne → 4003
+            await _reject_websocket(websocket, WS_CLOSE_FORBIDDEN if exc.inactive else WS_CLOSE_UNAUTHORIZED)
             return
+        username = user.username
         user_id = str(user.id)
         user_role = user.role
         location_ids = [loc.id for loc in user.locations]
     finally:
         db.close()
+
+    async def _reverify_session(ping_token: str | None) -> int | None:
+        """
+        Z4: przy każdym pingu sprawdza sesję jeszcze raz (ważność tokenu, aktywność konta,
+        wersję tokenów, wylogowanie). Panel odnawia token po stronie REST, więc w pingu
+        przysyła aktualny; stary token z połączenia obowiązuje tylko dopóki nie przyjdzie nowy.
+        Zwraca kod zamknięcia albo None, gdy sesja jest w porządku.
+        """
+        check_db = SessionLocal()
+        try:
+            try:
+                checked = await authenticate_token(ping_token or token, check_db, redis_client)
+            except TokenError as exc:
+                return WS_CLOSE_FORBIDDEN if exc.inactive else WS_CLOSE_UNAUTHORIZED
+            # token z pinga musi należeć do tego samego konta, co połączenie
+            if str(checked.id) != user_id:
+                return WS_CLOSE_UNAUTHORIZED
+            return None
+        finally:
+            check_db.close()
 
     async def _touch_last_seen():
         """Aktualizuje last_seen_at operatora — wywoływane na connect i przy każdym pingu."""
@@ -844,6 +874,14 @@ async def websocket_endpoint(
                 logger.debug("WS: '%s' zasubskrybował: %s", username, topics)
 
             elif msg_type == "ping":
+                close_code = await _reverify_session(data.get("token"))
+                if close_code is not None:
+                    logger.info("WS: sesja '%s' nieważna przy pingu — zamykam kodem %s.", username, close_code)
+                    ws_manager.disconnect(websocket)
+                    await _clear_last_seen()
+                    await _broadcast_presence("offline")
+                    await websocket.close(code=close_code)
+                    return
                 await _touch_last_seen()
                 await ws_manager.send_personal(websocket, {"type": "pong"})
 
@@ -1588,6 +1626,9 @@ async def create_user(
 ):
     """Tworzy nowego użytkownika. Hasło jest hashowane bcryptem."""
     _validate_role(data.role)
+    password_error = validate_password(data.password, data.username)
+    if password_error:
+        raise HTTPException(status_code=422, detail=password_error)
     existing = db.query(models.User).filter(models.User.username == data.username).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Użytkownik '{data.username}' już istnieje")
@@ -1656,9 +1697,15 @@ async def update_user(
                 status_code=400,
                 detail="Nie możesz odebrać sobie roli administratora — poproś o to innego administratora",
             )
+        if data.role != user.role:
+            bump_token_version(user)
         user.role = data.role
     if data.password:
+        password_error = validate_password(data.password, data.username or user.username)
+        if password_error:
+            raise HTTPException(status_code=422, detail=password_error)
         user.password_hash = hash_password(data.password)
+        bump_token_version(user)
 
     if data.location_ids is not None:
         locations = db.query(models.Location).filter(
@@ -1763,6 +1810,7 @@ async def deactivate_user(
 
     user.is_active = False
     user.locations = []
+    bump_token_version(user)  # tokeny wydane przed dezaktywacją nie wrócą po ponownej aktywacji
 
     db.commit()
     db.refresh(user)

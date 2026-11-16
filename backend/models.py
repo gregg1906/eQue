@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime, timezone
-from sqlalchemy import String, ForeignKey, DateTime, Date, Boolean, Table, Column, UniqueConstraint
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Date, Boolean, Table, Column, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
@@ -29,6 +29,9 @@ class User(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Ustawienia panelu zapisane na koncie (schemat: schemas.api_schemas.UserPreferences).
     preferences: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+    # Wersja tokenów konta (pole "ver" w JWT). Rośnie przy zmianie/resecie hasła, zmianie roli
+    # i dezaktywacji — wszystkie wydane wcześniej tokeny przestają działać (Z3).
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     locations: Mapped[list["Location"]] = relationship(
         secondary=user_locations, back_populates="users"

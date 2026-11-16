@@ -166,6 +166,13 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
+class PasswordChangedResponse(BaseModel):
+    """Odpowiedź POST /auth/change-password. Zmiana hasła unieważnia dotychczasowe tokeny konta,
+    więc w odpowiedzi jest świeży token — panel zapisuje go i sesja trwa bez ponownego logowania."""
+    message: str
+    access_token: str
+    token_type: str = "bearer"
+
 class TokenResponse(BaseModel):
     """Odpowiedź POST /auth/login — token + dane profilu potrzebne frontendowi od razu po logowaniu."""
     access_token: str

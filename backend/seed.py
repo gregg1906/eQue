@@ -1,18 +1,34 @@
 """
-seed.py — zasilanie bazy danych danymi testowymi.
+seed.py — pierwsze konto administratora i (opcjonalnie) dane demonstracyjne.
 
 Uruchamianie:
     python seed.py
 
-Skrypt jest idempotentny: jeśli tabela users już zawiera dane, kończy bez zmian.
+Zmienne środowiskowe:
+    ADMIN_INITIAL_PASSWORD  hasło pierwszego administratora (login: ADMIN_INITIAL_USERNAME, domyślnie "admin");
+                            musi spełniać politykę haseł (password_policy.py)
+    SEED_DEMO_DATA=1        dodatkowo konta operatorów, lokalizacje, tablety i bilety testowe
+                            (tylko do rozwoju i pokazów — domyślnie wyłączone)
+
+Skrypt jest idempotentny: jeśli tabela users już zawiera dane, kończy bez zmian. Bez żadnej
+ze zmiennych na pustej bazie nie powstaje żadne konto.
 """
+import os
+import sys
 from datetime import datetime, timedelta, timezone
 from database import SessionLocal
 from models import User, Location, Tablet, Ticket
 from auth import hash_password
+from password_policy import validate_password
+
+DEMO_ADMIN_PASSWORD = "admin123"  # tylko przy SEED_DEMO_DATA=1 i bez ADMIN_INITIAL_PASSWORD
 
 
 def seed_data():
+    demo = os.getenv("SEED_DEMO_DATA", "") == "1"
+    admin_username = os.getenv("ADMIN_INITIAL_USERNAME", "admin").strip() or "admin"
+    admin_password = os.getenv("ADMIN_INITIAL_PASSWORD", "")
+
     db = SessionLocal()
 
     if db.query(User).first():
@@ -20,16 +36,36 @@ def seed_data():
         db.close()
         return
 
-    print("Zasilanie bazy danych (Seeding)...")
+    if not demo and not admin_password:
+        print("Pusta baza i brak ADMIN_INITIAL_PASSWORD ani SEED_DEMO_DATA=1 — nie tworzę żadnego konta.")
+        print("Ustaw ADMIN_INITIAL_PASSWORD w pliku .env i uruchom ponownie.")
+        db.close()
+        return
 
+    if admin_password:
+        error = validate_password(admin_password, admin_username)
+        if error:
+            db.close()
+            sys.exit(f"ADMIN_INITIAL_PASSWORD odrzucone: {error}")
+    else:
+        admin_password = DEMO_ADMIN_PASSWORD
 
     admin = User(
-        username="admin",
+        username=admin_username,
         full_name="Administrator Systemu",
         role="ADMIN",
-        password_hash=hash_password("admin123"),
+        password_hash=hash_password(admin_password),
         is_active=True,
     )
+
+    if not demo:
+        db.add(admin)
+        db.commit()
+        db.close()
+        print(f"Utworzono konto administratora '{admin_username}'.")
+        return
+
+    print("Zasilanie bazy danymi demonstracyjnymi (SEED_DEMO_DATA=1)...")
 
     op1 = User(
         username="jan.kowalski",
@@ -153,7 +189,7 @@ def seed_data():
     db.close()
 
     print("✅ Seeding zakończony! Dane testowe:")
-    print(f"   👤 Admin:     admin / admin123")
+    print(f"   👤 Admin:     {admin_username} (hasło z ADMIN_INITIAL_PASSWORD albo demonstracyjne z README)")
     print(f"   👤 Operator1: jan.kowalski / operator123  → Rejestracja Ogólna")
     print(f"   👤 Operator2: anna.nowak / operator123    → Rejestracja Ogólna + Kardiologia")
     print(f"   🎫 Bilety loc1: 3×WAITING + 1×SERVING")

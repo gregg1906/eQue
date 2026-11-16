@@ -3,7 +3,11 @@ import { getToken } from './api';
 const PING_INTERVAL_MS = 20000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
-/** Kody zamknięcia z backendu: 4001 — nieważny/wygasły token, 4003 — konto nieaktywne. */
+/**
+  Kody zamknięcia z backendu: 4001 — nieważny/wygasły/unieważniony token, 4003 — konto nieaktywne.
+  Serwer sprawdza sesję przy połączeniu i przy każdym pingu; ping niesie aktualny token, bo panel
+  odnawia go po stronie REST, a połączenie zostało otwarte ze starszym.
+*/
 const AUTH_CLOSE_CODES = new Set([4001, 4003]);
 
 export type WsMessage = { type: string; topic?: string; [key: string]: unknown };
@@ -95,7 +99,7 @@ class WsClient {
       this.setStatus('connected');
       socket.send(JSON.stringify({ type: 'subscribe', topics: this.topics }));
       this.pingTimer = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }));
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping', token: getToken() }));
       }, PING_INTERVAL_MS);
       if (isReconnect) this.reconnectHandlers.forEach(h => h());
     };
