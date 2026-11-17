@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } fro
 import { api } from '../lib/api';
 import { ws, type WsMessage } from '../lib/ws';
 import { sortByName } from '../lib/sort';
+import { useTableSort, sortRows } from '../lib/useTableSort';
+import SortHeader from './ui/SortHeader';
 import { plural } from '../lib/plural';
 import { minutesSince, LONG_WAIT_MIN } from '../lib/time';
 import { useTick } from '../lib/useTick';
@@ -14,11 +16,14 @@ import TicketCode from './ui/TicketCode';
 import StatusPill from './ui/StatusPill';
 import EmptyState from './ui/EmptyState';
 
+type HomeSortKey = 'name' | 'serving' | 'waiting' | 'longest' | 'signups';
+
 const UserHome = forwardRef<RefreshHandle, {
   locationIds: number[];
   currentUserId: string;
   onOpenQueue: (locationId?: number) => void;
 }>(function UserHome({ locationIds, currentUserId, onOpenQueue }, ref) {
+  const { sort, toggle, indicator } = useTableSort<HomeSortKey>('name');
   const [myLocations, setMyLocations] = useState<LocationResponse[]>([]);
   const [queues, setQueues] = useState<Record<number, QueueResponse>>({});
   const [loaded, setLoaded] = useState(false);
@@ -80,7 +85,19 @@ const UserHome = forwardRef<RefreshHandle, {
   }
 
   const active = sortByName(myLocations.filter(l => l.is_active), l => l.name);
-  const sortedLocations = [...active, ...sortByName(myLocations.filter(l => !l.is_active), l => l.name)];
+  const defaultOrder = [...active, ...sortByName(myLocations.filter(l => !l.is_active), l => l.name)];
+  const queueOf = (l: LocationResponse) => (l.is_active ? queues[l.id] : undefined);
+  const signupStatus = (l: LocationResponse) =>
+    !l.is_active ? { tone: 'offline' as const, label: 'Dezaktywowana' }
+    : l.accepting_new_tickets ? { tone: 'neutral' as const, label: 'Otwarte' }
+    : { tone: 'paused' as const, label: 'Wstrzymane' };
+  const sortedLocations = sortRows(defaultOrder, sort, {
+    name: l => l.name,
+    serving: l => queueOf(l)?.serving?.ticket_code,
+    waiting: l => { const q = queueOf(l); return q ? q.waiting.length : null; },
+    longest: l => { const q = queueOf(l); return q?.waiting[0] ? minutesSince(q.waiting[0].joined_at) : null; },
+    signups: l => signupStatus(l).label,
+  }, (a, b) => defaultOrder.indexOf(a) - defaultOrder.indexOf(b));
   const waitingTotal = active.reduce((sum, l) => sum + (queues[l.id]?.waiting.length ?? 0), 0);
 
   // dzisiejsze bilety zakończone przez zalogowanego operatora (z serwera)
@@ -136,7 +153,13 @@ const UserHome = forwardRef<RefreshHandle, {
         <div className="dtable-wrap">
           <table className="dtable">
             <thead>
-              <tr><th>Lokalizacja</th><th>Teraz obsługiwany</th><th>Czeka</th><th>Najdłużej</th><th>Zapisy</th></tr>
+              <tr>
+              <SortHeader dir={indicator('name')} onToggle={() => toggle('name')}>Lokalizacja</SortHeader>
+              <SortHeader dir={indicator('serving')} onToggle={() => toggle('serving')}>Teraz obsługiwany</SortHeader>
+              <SortHeader dir={indicator('waiting')} onToggle={() => toggle('waiting')}>Czeka</SortHeader>
+              <SortHeader dir={indicator('longest')} onToggle={() => toggle('longest')}>Najdłużej</SortHeader>
+              <SortHeader dir={indicator('signups')} onToggle={() => toggle('signups')}>Zapisy</SortHeader>
+            </tr>
             </thead>
             <tbody>
               {sortedLocations.map(loc => {
@@ -159,9 +182,7 @@ const UserHome = forwardRef<RefreshHandle, {
                       {wait === null ? <span className="muted">–</span> : <span className={wait >= LONG_WAIT_MIN ? 'text-warn' : undefined}>{wait} min</span>}
                     </td>
                     <td>
-                      {!loc.is_active ? <StatusPill tone="offline">Dezaktywowana</StatusPill>
-                        : loc.accepting_new_tickets ? <StatusPill tone="neutral">Otwarte</StatusPill>
-                        : <StatusPill tone="paused">Wstrzymane</StatusPill>}
+                      <StatusPill tone={signupStatus(loc).tone}>{signupStatus(loc).label}</StatusPill>
                     </td>
                   </tr>
                 );

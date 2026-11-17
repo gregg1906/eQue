@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } fro
 import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
 import { sortByName } from '../lib/sort';
+import { useTableSort, sortRows } from '../lib/useTableSort';
+import SortHeader from './ui/SortHeader';
 import type { LocationResponse, TabletResponse, UserResponse, RefreshHandle } from '../lib/apiTypes';
 import { confirmDialog } from '../lib/dialog-actions';
 import { showToast } from './ui/useToast';
@@ -36,6 +38,14 @@ function toDraft(location: LocationResponse): LocationDraft {
     tablet_id: location.tablet?.id ?? null,
     user_ids: [...location.user_ids],
   };
+}
+
+type LocationSortKey = 'name' | 'kiosk' | 'operators' | 'status';
+
+function locationStatus(l: LocationResponse): { tone: 'offline' | 'paused' | 'online'; label: string } {
+  if (!l.is_active) return { tone: 'offline', label: 'Dezaktywowana' };
+  if (!l.accepting_new_tickets) return { tone: 'paused', label: 'Zapisy wstrzymane' };
+  return { tone: 'online', label: 'Aktywna' };
 }
 
 function errorMessage(err: unknown, fallback: string) {
@@ -250,7 +260,8 @@ const AdminLocations = forwardRef<RefreshHandle, {
   const tabletById = new Map(tablets.map(t => [t.id, t]));
   const userById = new Map(users.map(u => [u.id, u]));
   const q = query.trim().toLowerCase();
-  const visibleLocations = sortByName(
+  const { sort, toggle, indicator } = useTableSort<LocationSortKey>('name');
+  const filteredLocations = sortByName(
     locations.filter(l =>
       !q || [
         l.name, l.description, l.queue_code, l.tablet?.name,
@@ -259,6 +270,12 @@ const AdminLocations = forwardRef<RefreshHandle, {
     ),
     l => l.name
   );
+  const visibleLocations = sortRows(filteredLocations, sort, {
+    name: l => l.name,
+    kiosk: l => (l.tablet ? l.tablet.name || 'Tablet bez nazwy' : null),
+    operators: l => l.user_ids.map(id => userById.get(id)?.full_name).filter(Boolean).join(', '),
+    status: l => locationStatus(l).label,
+  }, (a, b) => a.name.localeCompare(b.name, 'pl'));
   const editedLocation = draft ? locations.find(l => l.id === draft.id) : undefined;
   const assignableUsers = sortByName(users.filter(u => u.is_active && u.role === 'OPERATOR'), u => u.full_name);
 
@@ -275,7 +292,12 @@ const AdminLocations = forwardRef<RefreshHandle, {
       <div className="dtable-wrap">
         <table className="dtable">
           <thead>
-            <tr><th>Lokalizacja</th><th>Kiosk</th><th>Operatorzy</th><th>Status</th></tr>
+            <tr>
+              <SortHeader dir={indicator('name')} onToggle={() => toggle('name')}>Lokalizacja</SortHeader>
+              <SortHeader dir={indicator('kiosk')} onToggle={() => toggle('kiosk')}>Kiosk</SortHeader>
+              <SortHeader dir={indicator('operators')} onToggle={() => toggle('operators')}>Operatorzy</SortHeader>
+              <SortHeader dir={indicator('status')} onToggle={() => toggle('status')}>Status</SortHeader>
+            </tr>
           </thead>
           <tbody>
             {!loading && visibleLocations.length === 0 && (
@@ -327,9 +349,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
                       : <span className="muted">Nikt</span>}
                   </td>
                   <td>
-                    {!location.is_active ? <StatusPill tone="offline">Dezaktywowana</StatusPill>
-                      : !location.accepting_new_tickets ? <StatusPill tone="paused">Zapisy wstrzymane</StatusPill>
-                      : <StatusPill tone="online">Aktywna</StatusPill>}
+                    <StatusPill tone={locationStatus(location).tone}>{locationStatus(location).label}</StatusPill>
                   </td>
                 </tr>
               );

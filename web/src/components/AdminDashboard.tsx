@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } fro
 import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
 import { sortByName } from '../lib/sort';
+import { useTableSort, sortRows } from '../lib/useTableSort';
+import SortHeader from './ui/SortHeader';
 import { formatLastSeen } from '../lib/time';
 import { useTick } from '../lib/useTick';
 import type { TabletResponse, LocationResponse, RefreshHandle } from '../lib/apiTypes';
@@ -22,9 +24,16 @@ function errorMessage(err: unknown, fallback: string) {
   return err instanceof ApiError ? `${fallback}: ${err.message}` : `${fallback}. Sprawdź połączenie i spróbuj ponownie.`;
 }
 
+type TabletSortKey = 'name' | 'location' | 'status';
+
+function tabletStatus(t: TabletResponse): { tone: 'online' | 'offline'; label: string } {
+  if (!t.is_active) return { tone: 'offline', label: 'Dezaktywowany' };
+  return t.online ? { tone: 'online', label: 'Online' } : { tone: 'offline', label: 'Offline' };
+}
+
 function TabletStatus({ tablet }: { tablet: TabletResponse }) {
-  if (!tablet.is_active) return <StatusPill tone="offline">Dezaktywowany</StatusPill>;
-  return tablet.online ? <StatusPill tone="online">Online</StatusPill> : <StatusPill tone="offline">Offline</StatusPill>;
+  const s = tabletStatus(tablet);
+  return <StatusPill tone={s.tone}>{s.label}</StatusPill>;
 }
 
 function TokenField({ token }: { token: string }) {
@@ -233,7 +242,8 @@ const AdminDashboard = forwardRef<RefreshHandle, {
   // ——— lista ———
   const locationById = new Map(locations.map(l => [l.id, l]));
   const q = query.trim().toLowerCase();
-  const visibleDevices = sortByName(
+  const { sort, toggle, indicator } = useTableSort<TabletSortKey>('name');
+  const filteredDevices = sortByName(
     devices.filter(d =>
       !q || [
         d.name,
@@ -243,6 +253,11 @@ const AdminDashboard = forwardRef<RefreshHandle, {
     ),
     d => d.name
   );
+  const visibleDevices = sortRows(filteredDevices, sort, {
+    name: d => d.name,
+    location: d => (d.location_id !== null ? locationById.get(d.location_id)?.name : null),
+    status: d => tabletStatus(d).label,
+  }, (a, b) => a.name.localeCompare(b.name, 'pl'));
   const editedDevice = editing ? devices.find(d => d.id === editing.id) : undefined;
 
   return (
@@ -258,7 +273,11 @@ const AdminDashboard = forwardRef<RefreshHandle, {
       <div className="dtable-wrap">
         <table className="dtable">
           <thead>
-            <tr><th>Tablet</th><th>Lokalizacja</th><th>Status</th></tr>
+            <tr>
+              <SortHeader dir={indicator('name')} onToggle={() => toggle('name')}>Tablet</SortHeader>
+              <SortHeader dir={indicator('location')} onToggle={() => toggle('location')}>Lokalizacja</SortHeader>
+              <SortHeader dir={indicator('status')} onToggle={() => toggle('status')}>Status</SortHeader>
+            </tr>
           </thead>
           <tbody>
             {!loading && visibleDevices.length === 0 && (

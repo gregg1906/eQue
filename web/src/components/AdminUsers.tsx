@@ -3,6 +3,8 @@ import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validatePassword } from '../lib/passwordPolicy';
 import { sortByName } from '../lib/sort';
+import { useTableSort, sortRows } from '../lib/useTableSort';
+import SortHeader from './ui/SortHeader';
 import type { UserResponse, LocationResponse, Role, RefreshHandle } from '../lib/apiTypes';
 import { confirmDialog } from '../lib/dialog-actions';
 import { showToast } from './ui/useToast';
@@ -23,6 +25,13 @@ const ROLE_OPTIONS = [
   { value: 'OPERATOR', label: 'Operator' },
   { value: 'ADMIN', label: 'Administrator' },
 ];
+
+type UserSortKey = 'name' | 'locations' | 'role' | 'status';
+
+function userStatus(u: UserResponse): { tone: 'online' | 'offline'; label: string } {
+  if (!u.is_active) return { tone: 'offline', label: 'Dezaktywowany' };
+  return u.online ? { tone: 'online', label: 'Online' } : { tone: 'offline', label: 'Offline' };
+}
 
 interface AddErrors { fullName?: string; username?: string; password?: string }
 
@@ -238,7 +247,10 @@ const AdminUsers = forwardRef<RefreshHandle, {
   // ——— lista ———
   const locationById = new Map(locations.map(l => [l.id, l]));
   const q = query.trim().toLowerCase();
-  const visibleUsers = sortByName(
+  const { sort, toggle, indicator } = useTableSort<UserSortKey>('name');
+  const byName = (a: UserResponse, b: UserResponse) => a.full_name.localeCompare(b.full_name, 'pl');
+  const locationNames = (u: UserResponse) => u.location_ids.map(id => locationById.get(id)?.name).filter(Boolean).join(', ');
+  const filteredUsers = sortByName(
     users.filter(u =>
       !q || [
         u.full_name, u.username, u.position,
@@ -247,6 +259,12 @@ const AdminUsers = forwardRef<RefreshHandle, {
     ),
     u => u.full_name
   );
+  const visibleUsers = sortRows(filteredUsers, sort, {
+    name: u => u.full_name,
+    locations: u => (u.role === 'ADMIN' ? 'Dostęp globalny' : locationNames(u)),
+    role: u => (u.role === 'ADMIN' ? 'Administrator' : 'Operator'),
+    status: u => userStatus(u).label,
+  }, byName);
   const editedUser = editUser ? users.find(u => u.id === editUser.id) : undefined;
   const assignableLocations = sortByName(locations.filter(l => l.is_active), l => l.name);
 
@@ -263,7 +281,12 @@ const AdminUsers = forwardRef<RefreshHandle, {
       <div className="dtable-wrap">
         <table className="dtable">
           <thead>
-            <tr><th>Pracownik</th><th>Lokalizacje</th><th>Rola</th><th>Status</th></tr>
+            <tr>
+              <SortHeader dir={indicator('name')} onToggle={() => toggle('name')}>Pracownik</SortHeader>
+              <SortHeader dir={indicator('locations')} onToggle={() => toggle('locations')}>Lokalizacje</SortHeader>
+              <SortHeader dir={indicator('role')} onToggle={() => toggle('role')}>Rola</SortHeader>
+              <SortHeader dir={indicator('status')} onToggle={() => toggle('status')}>Status</SortHeader>
+            </tr>
           </thead>
           <tbody>
             {!loading && visibleUsers.length === 0 && (
@@ -313,9 +336,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
                   </td>
                   <td><StatusPill tone="neutral">{user.role === 'ADMIN' ? 'Administrator' : 'Operator'}</StatusPill></td>
                   <td>
-                    {!user.is_active ? <StatusPill tone="offline">Dezaktywowany</StatusPill>
-                      : user.online ? <StatusPill tone="online">Online</StatusPill>
-                      : <StatusPill tone="offline">Offline</StatusPill>}
+                    <StatusPill tone={userStatus(user).tone}>{userStatus(user).label}</StatusPill>
                   </td>
                 </tr>
               );

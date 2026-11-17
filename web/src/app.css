@@ -318,3 +318,13 @@
   .meter { border: 1px solid CanvasText; }
   .meter i { forced-color-adjust: none; background: Highlight; }
 }
+
+/* ——— Sortowanie po nagłówku kolumny ——— */
+.sort-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: inherit; white-space: nowrap; border-radius: var(--radius-sm);
+}
+.sort-btn:hover, .sort-btn.is-sorted { color: var(--text-strong); }
+.sort-ico { width: 10px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sort-ico path { opacity: .35; }
+.sort-ico path.is-on { opacity: 1; stroke: var(--text-brand); }

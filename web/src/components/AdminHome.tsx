@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } fro
 import { api } from '../lib/api';
 import { ws, type WsMessage } from '../lib/ws';
 import { sortByName } from '../lib/sort';
+import { useTableSort, sortRows } from '../lib/useTableSort';
+import SortHeader from './ui/SortHeader';
 import { plural } from '../lib/plural';
 import { formatOfflineFor, minutesSince, LONG_WAIT_MIN } from '../lib/time';
 import { useTick } from '../lib/useTick';
@@ -30,6 +32,7 @@ interface Issue {
 }
 
 const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: NavigateOptions) => void }>(function AdminHome({ onNavigate }, ref) {
+  const { sort, toggle, indicator } = useTableSort<HomeSortKey>('name');
   const [tablets, setTablets] = useState<TabletResponse[]>([]);
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [locations, setLocations] = useState<LocationResponse[]>([]);
@@ -190,7 +193,26 @@ const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: N
   }
   issues.push(...tabletIssues);
 
-  const sortedLocations = [...sortByName(activeLocations, l => l.name), ...sortByName(locations.filter(l => !l.is_active), l => l.name)];
+  const defaultOrder = [...sortByName(activeLocations, l => l.name), ...sortByName(locations.filter(l => !l.is_active), l => l.name)];
+  const queueOf = (l: LocationResponse) => (l.is_active ? queues[l.id] : undefined);
+  const kioskStatus = (l: LocationResponse) => {
+    const tablet = l.tablet ? tabletById.get(l.tablet.id) : undefined;
+    if (!l.tablet) return { tone: 'offline' as const, label: 'Brak kiosku' };
+    if (!l.tablet.is_active) return { tone: 'offline' as const, label: 'Dezaktywowany' };
+    return tablet?.online ? { tone: 'online' as const, label: 'Online' } : { tone: 'offline' as const, label: 'Offline' };
+  };
+  const signupStatus = (l: LocationResponse) =>
+    !l.is_active ? { tone: 'offline' as const, label: 'Dezaktywowana' }
+    : l.accepting_new_tickets ? { tone: 'neutral' as const, label: 'Otwarte' }
+    : { tone: 'paused' as const, label: 'Wstrzymane' };
+  const sortedLocations = sortRows(defaultOrder, sort, {
+    name: l => l.name,
+    serving: l => queueOf(l)?.serving?.ticket_code,
+    waiting: l => { const q = queueOf(l); return q ? q.waiting.length : null; },
+    longest: l => { const q = queueOf(l); return q?.waiting[0] ? minutesSince(q.waiting[0].joined_at) : null; },
+    kiosk: l => kioskStatus(l).label,
+    signups: l => signupStatus(l).label,
+  }, (a, b) => defaultOrder.indexOf(a) - defaultOrder.indexOf(b));
 
   return (
     <>
@@ -239,13 +261,19 @@ const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: N
           <div className="dtable-wrap">
             <table className="dtable">
               <thead>
-                <tr><th>Lokalizacja</th><th>Teraz obsługiwany</th><th>Czeka</th><th>Najdłużej</th><th>Kiosk</th><th>Zapisy</th></tr>
+                <tr>
+              <SortHeader dir={indicator('name')} onToggle={() => toggle('name')}>Lokalizacja</SortHeader>
+              <SortHeader dir={indicator('serving')} onToggle={() => toggle('serving')}>Teraz obsługiwany</SortHeader>
+              <SortHeader dir={indicator('waiting')} onToggle={() => toggle('waiting')}>Czeka</SortHeader>
+              <SortHeader dir={indicator('longest')} onToggle={() => toggle('longest')}>Najdłużej</SortHeader>
+              <SortHeader dir={indicator('kiosk')} onToggle={() => toggle('kiosk')}>Kiosk</SortHeader>
+              <SortHeader dir={indicator('signups')} onToggle={() => toggle('signups')}>Zapisy</SortHeader>
+            </tr>
               </thead>
               <tbody>
                 {sortedLocations.map(loc => {
                   const q = loc.is_active ? queues[loc.id] : undefined;
                   const longest = q?.waiting[0] ? minutesSince(q.waiting[0].joined_at) : null;
-                  const tablet = loc.tablet ? tabletById.get(loc.tablet.id) : undefined;
                   const open = () => onNavigate('lokalizacje', { editId: loc.id });
                   return (
                     <tr
@@ -263,15 +291,10 @@ const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: N
                         {longest === null ? <span className="muted">–</span> : <span className={longest >= LONG_WAIT_MIN ? 'text-warn' : undefined}>{longest} min</span>}
                       </td>
                       <td>
-                        {!loc.tablet ? <StatusPill tone="offline">Brak kiosku</StatusPill>
-                          : !loc.tablet.is_active ? <StatusPill tone="offline">Dezaktywowany</StatusPill>
-                          : tablet?.online ? <StatusPill tone="online">Online</StatusPill>
-                          : <StatusPill tone="offline">Offline</StatusPill>}
+                        <StatusPill tone={kioskStatus(loc).tone}>{kioskStatus(loc).label}</StatusPill>
                       </td>
                       <td>
-                        {!loc.is_active ? <StatusPill tone="offline">Dezaktywowana</StatusPill>
-                          : loc.accepting_new_tickets ? <StatusPill tone="neutral">Otwarte</StatusPill>
-                          : <StatusPill tone="paused">Wstrzymane</StatusPill>}
+                        <StatusPill tone={signupStatus(loc).tone}>{signupStatus(loc).label}</StatusPill>
                       </td>
                     </tr>
                   );
@@ -284,5 +307,7 @@ const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: N
     </>
   );
 });
+
+type HomeSortKey = 'name' | 'serving' | 'waiting' | 'longest' | 'kiosk' | 'signups';
 
 export default AdminHome;
