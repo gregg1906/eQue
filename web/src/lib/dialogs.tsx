@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { setDialogDispatcher, setDialogDismisser, type DialogRequest } from './dialog-actions';
 import Button from '../components/ui/Button';
-import Icon from '../components/ui/Icon';
 
 
 export function DialogHost() {
@@ -80,15 +79,8 @@ export function DialogHost() {
         aria-labelledby={pending.title ? titleId : undefined}
         aria-describedby={textId}
       >
-        <div className="flex items-start gap-3.5">
-          <span className={danger ? 'dialog-icon is-danger' : 'dialog-icon'}>
-            <Icon name={danger ? 'alert' : 'info'} />
-          </span>
-          <div className="min-w-0 flex-1 pt-1">
-            {pending.title && <h2 className="dialog-title" id={titleId}>{pending.title}</h2>}
-            <p className="dialog-text" id={textId}>{pending.message}</p>
-          </div>
-        </div>
+        {pending.title && <h2 className="dialog-title" id={titleId}>{pending.title}</h2>}
+        <p className="dialog-text" id={textId}>{pending.message}</p>
 
         <div className="dialog-actions">
           {pending.kind === 'confirm' && (

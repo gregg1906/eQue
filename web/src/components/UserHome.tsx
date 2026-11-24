@@ -141,7 +141,7 @@ const UserHome = forwardRef<RefreshHandle, {
                   <b>{entry.customer_name || 'Bez nazwiska'}</b>
                   <span>{location.name} · <span className={wait >= LONG_WAIT_MIN ? 'text-warn' : undefined}>czeka {wait} min</span></span>
                 </div>
-                <Button size="sm" onClick={() => onOpenQueue(location.id)}>Przejdź do kolejki</Button>
+                <Button size="sm" variant="ghost" onClick={() => onOpenQueue(location.id)}>Do kolejki</Button>
               </li>
             );
           })}

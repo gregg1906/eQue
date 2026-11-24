@@ -13,7 +13,7 @@ interface LoginFormProps {
 }
 
 const FACILITY_NAME = 'Testowy szpital';
-const INVALID_CREDENTIALS ='Login lub hasło są nieprawidłowe. Sprawdź, czy nie masz włączonego Caps Lock.';
+const INVALID_CREDENTIALS = 'Nieprawidłowy login lub hasło. Sprawdź, czy Caps Lock jest wyłączony.';
 
 export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormProps) {
   const [username, setUsername] = useState('');
@@ -44,7 +44,7 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
       // 429: serwer zablokował logowanie po zbyt wielu nieudanych próbach — komunikat mówi, na ile minut
       if (err instanceof ApiError && err.status === 429) setError(err.message);
       else if (err instanceof ApiError && err.status < 500) setError(INVALID_CREDENTIALS);
-      else if (err instanceof ApiError) setError('Serwer chwilowo nie odpowiada. Spróbuj ponownie za chwilę.');
+      else if (err instanceof ApiError) setError('Serwer nie odpowiada. Spróbuj ponownie za chwilę.');
       else setError('Brak połączenia z serwerem. Sprawdź sieć i spróbuj ponownie.');
     } finally {
       setLoading(false);
@@ -57,19 +57,18 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
 
   return (
     <div className="login">
-      <div className="login-art">
-        <span className="login-brand">
-          <img src="/logo-mark.svg" width="32" height="32" alt="" />
-          eQue
-        </span>
-        <div className="login-big">{FACILITY_NAME}</div>
-        <p>Zarządzaj kolejkami w swojej placówce szybko i wygodnie.</p>
-      </div>
+      <span className="login-brand">
+        <img src="/logo-mark.svg" width="26" height="26" alt="" />
+        eQue
+      </span>
 
-      <div className="login-form">
+      <main className="login-form">
         <form onSubmit={handleLogin} noValidate>
-          <h1 className="login-title">Zaloguj się</h1>
-          <p className="login-sub">Panel przeznaczony dla personelu.</p>
+          <div className="login-head">
+            <p className="login-place">{FACILITY_NAME}</p>
+            <h1 className="login-title">Logowanie do panelu</h1>
+            <p className="login-sub">Dla personelu: operatorów kolejek i administratorów.</p>
+          </div>
 
           {notice && !error && (
             <div className="note" role="status">
@@ -111,7 +110,11 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
             {loading ? 'Logowanie…' : 'Zaloguj się'}
           </Button>
         </form>
-      </div>
+      </main>
+
+      <footer className="login-foot">
+        <span>Nie pamiętasz hasła? Poproś administratora placówki o nowe.</span>
+      </footer>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-/** Kod biletu w Space Grotesk z cyframi o stałej szerokości. `hero` = kod na panelu obsługi (--text-code). */
+/** Kod biletu krojem mono (Atkinson Hyperlegible Mono) — 0/O i 1/l nie do pomylenia. `hero` = kod na panelu obsługi (--text-code). */
 export default function TicketCode({ code, size = 'list', state = 'default', className, style }: {
   code: string;
   size?: 'list' | 'hero';

@@ -59,11 +59,8 @@ function ChangePasswordCard() {
 
   return (
     <section className="card card-pad" aria-labelledby="password-title">
-      <div className="flex items-center gap-2.5 text-brand-text">
-        <Icon name="lock" />
-        <h2 className="card-title" id="password-title">Hasło i bezpieczeństwo</h2>
-      </div>
-      <p className="card-sub mb-5">Zmień hasło używane do logowania na to konto.</p>
+      <h2 className="card-title" id="password-title">Hasło</h2>
+      <p className="card-sub">Zmiana hasła do logowania na to konto.</p>
 
       <form onSubmit={handleSubmit}>
         {formError && (
@@ -72,7 +69,7 @@ function ChangePasswordCard() {
         <Field label="Obecne hasło">
           <PasswordInput value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" />
         </Field>
-        <Field label="Nowe hasło" error={policyError} hint={`Co najmniej ${PASSWORD_MIN_LENGTH} znaków. Wielkie litery ani znaki specjalne nie są wymagane — im dłuższe hasło, tym lepiej.`}>
+        <Field label="Nowe hasło" error={policyError} hint={`Co najmniej ${PASSWORD_MIN_LENGTH} znaków. Długość liczy się bardziej niż znaki specjalne.`}>
           <PasswordInput value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={PASSWORD_MAX_LENGTH} />
           <PasswordStrength password={newPassword} />
         </Field>
@@ -127,9 +124,7 @@ function AppearanceCard() {
   return (
     <section className="card card-pad" aria-labelledby="appearance-title">
       <h2 className="card-title" id="appearance-title">Wygląd i czytelność</h2>
-      <p className="card-sub mb-5">
-        Zapisywane automatycznie na Twoim koncie — działają na każdym komputerze, na którym się zalogujesz.
-      </p>
+      <p className="card-sub">Zapisuje się od razu na koncie, więc działa na każdym komputerze.</p>
 
       <div className="settings-stack">
         <div className="settings-field">
@@ -171,7 +166,7 @@ function AppearanceCard() {
         />
         <ToggleRow
           title="Ogranicz animacje"
-          text="Panele i powiadomienia pojawiają się bez przesuwania, a migające wskaźniki stoją w miejscu."
+          text="Panele i powiadomienia pojawiają się bez przesuwania."
           checked={prefs.reduce_motion}
           onChange={reduce_motion => save({ reduce_motion })}
           systemNote={systemMotion ? 'Włączone w ustawieniach systemu — działa także na ekranie logowania.' : undefined}
@@ -202,7 +197,7 @@ function QueueWorkCard() {
   return (
     <section className="card card-pad" aria-labelledby="queue-work-title">
       <h2 className="card-title" id="queue-work-title">Praca z kolejką</h2>
-      <p className="card-sub mb-5">Dopasuj ekran „Kolejka na żywo” do swojego sposobu pracy.</p>
+      <p className="card-sub">Jak działa ekran kolejki na żywo.</p>
 
       <div className="settings-stack">
         <div className="settings-field">
@@ -214,8 +209,7 @@ function QueueWorkCard() {
             options={UNDO_OPTIONS}
           />
           <p className="field-hint">
-            Tyle sekund masz na cofnięcie wezwania lub zakończenia obsługi. Dłuższy czas przyda się, gdy korzystasz z czytnika ekranu;
-            klient dostaje powiadomienie dopiero po tym czasie.
+            Tyle masz na cofnięcie wezwania lub zakończenia obsługi. Klient dostaje powiadomienie dopiero po tym czasie.
           </p>
         </div>
 
@@ -233,7 +227,7 @@ function QueueWorkCard() {
         <div className="settings-field">
           <ToggleRow
             title="Dźwięk przy nowej osobie w kolejce"
-            text="Krótki sygnał, gdy ktoś dołączy do kolejki w Twojej lokalizacji — także gdy jesteś na innym ekranie panelu."
+            text="Krótki sygnał, gdy ktoś dołączy do Twojej kolejki — także na innych ekranach panelu."
             checked={prefs.sound_on_new_ticket}
             onChange={sound_on_new_ticket => {
               save({ sound_on_new_ticket });
@@ -245,7 +239,7 @@ function QueueWorkCard() {
 
         <ToggleRow
           title="Skróty jednoklawiszowe"
-          text="Enter, N i P działają na ekranie kolejki bez Ctrl. Wyłącz, jeśli sterujesz komputerem głosem albo łatwo o przypadkowe naciśnięcie. Ctrl+K działa zawsze."
+          text="Enter, N i P działają na ekranie kolejki bez Ctrl. Wyłącz przy sterowaniu głosem lub gdy łatwo o przypadkowe naciśnięcie."
           checked={prefs.single_key_shortcuts}
           onChange={single_key_shortcuts => save({ single_key_shortcuts })}
         />
@@ -260,20 +254,10 @@ export default function AdminSettings({ isOperator }: { isOperator: boolean }) {
     ...(isOperator ? [<QueueWorkCard key="queue" />] : []),
     <ChangePasswordCard key="password" />,
   ];
-  // Dwie niezależne kolumny (kolejne karty na przemian): nowa karta trafia pod kartę nad nią,
-  // a nie pod sąsiednią. Na wąskim ekranie kolumny znikają (display: contents), a --i przywraca kolejność.
-  const column = (parity: number) => (
-    <div className="settings-col">
-      {cards.map((card, i) => i % 2 === parity && (
-        <div key={card.key} className="settings-item" style={{ '--i': i } as React.CSSProperties}>{card}</div>
-      ))}
-    </div>
-  );
-
+  // Sekcje jedna pod drugą: opis po lewej, kontrolki po prawej (na wąskim ekranie — pod spodem).
   return (
     <div className="settings">
-      {column(0)}
-      {column(1)}
+      {cards.map(card => <div key={card.key} className="settings-item">{card}</div>)}
     </div>
   );
 }

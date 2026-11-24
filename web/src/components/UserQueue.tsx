@@ -70,9 +70,8 @@ function ServingPanel({ location, queue, onDone, onNoShow, onCallFirst, shortcut
     <section className="serving-panel is-empty" aria-label="Teraz obsługiwany">
       {paused}
       <div className="serving-label"><span className="serving-label-main">Teraz obsługiwany</span></div>
-      <TicketCode code="–" size="hero" />
       <div className="serving-who">
-        <b>{next ? 'Nikt nie jest obsługiwany' : 'Nikt nie czeka'}</b>
+        <b>{next ? 'Nikt nie jest obsługiwany' : 'Kolejka jest pusta'}</b>
         <span>
           {next
             ? `Pierwsza w kolejce jest osoba z biletem ${next.ticket_code}.`
@@ -286,7 +285,7 @@ const UserQueue = forwardRef<RefreshHandle, {
         <EmptyState
           icon="pin"
           title="Nie masz przypisanych lokalizacji"
-          text="Poproś administratora placówki o przypisanie do lokalizacji. Kolejka pojawi się tutaj od razu po przypisaniu."
+          text="Poproś administratora placówki o przypisanie. Kolejka pojawi się tu od razu."
         />
       </div>
     );
@@ -315,19 +314,16 @@ const UserQueue = forwardRef<RefreshHandle, {
                   { value: 'done', label: 'Zakończone', count: finishedHere.length },
                 ]}
               />
-              <p className="qlist-caption">Kolejność według godziny dołączenia. Bursztynowy czas: ponad {LONG_WAIT_MIN} min.</p>
+              {list === 'wait' && <p className="qlist-caption">Według godziny dołączenia · bursztynowy czas = ponad {LONG_WAIT_MIN} min</p>}
             </div>
 
             {list === 'wait' ? (
               !queue || queue.waiting.length === 0 ? (
-                <div className="card">
-                  <EmptyState
-                    title="Nikt nie czeka"
-                    text={location.accepting_new_tickets
-                      ? 'Gdy ktoś dołączy przez kiosk, pojawi się tutaj.'
-                      : 'Zapisy są wstrzymane, więc nowe osoby nie dołączą.'}
-                  />
-                </div>
+                <p className="qlist-empty">
+                  {location.accepting_new_tickets
+                    ? 'Nikt nie czeka. Nowe osoby z kiosku pojawią się tutaj.'
+                    : 'Nikt nie czeka. Zapisy są wstrzymane, więc nowe osoby nie dołączą.'}
+                </p>
               ) : (
                 <ol className="qlist" aria-label="Oczekujący">
                   {queue.waiting.map((entry, i) => {
@@ -354,12 +350,7 @@ const UserQueue = forwardRef<RefreshHandle, {
                 </ol>
               )
             ) : finishedHere.length === 0 ? (
-              <div className="card">
-                <EmptyState
-                  title="Nic jeszcze nie zakończono"
-                  text="Tu zobaczysz bilety zakończone dzisiaj w tej lokalizacji — przez Ciebie i innych operatorów. Historia jest zapisana na serwerze, więc nie znika po odświeżeniu strony."
-                />
-              </div>
+              <p className="qlist-empty">Nic jeszcze dziś nie zakończono w tej lokalizacji.</p>
             ) : (
               <ol className="qlist" aria-label="Zakończone">
                 {finishedHere.map(entry => {
@@ -386,20 +377,20 @@ const UserQueue = forwardRef<RefreshHandle, {
           </div>
 
           <aside className="side-stack" aria-label="Zmiana operatora">
-            <div className="card side-card">
+            <section className="side-card">
               <div className="row-between">
                 <h2 className="side-card-title">Nowe zapisy</h2>
                 <Switch checked={location.accepting_new_tickets} onChange={togglePause} label="Przyjmuj nowe zapisy" />
               </div>
               <p>
                 {location.accepting_new_tickets
-                  ? 'Kiosk pokazuje kod zapisu. Wyłącz pod koniec zmiany; osoby już czekające obsłużysz normalnie.'
+                  ? 'Kiosk przyjmuje nowe osoby. Wyłącz pod koniec zmiany — czekających obsłużysz normalnie.'
                   : 'Kiosk pokazuje komunikat „Zapisy wstrzymane”. Osoby już czekające obsługujesz normalnie.'}
               </p>
-            </div>
+            </section>
 
-            <div className="card side-card">
-              <h2 className="side-card-title">Twoja zmiana</h2>
+            <section className="side-card">
+              <h2 className="side-card-title">Twoja zmiana dzisiaj</h2>
               <div className="tally">
                 <div><strong>{done}</strong><span>Obsłużono</span></div>
                 <div><strong>{noShow}</strong><span>Nie zgłosiło się</span></div>
@@ -407,10 +398,10 @@ const UserQueue = forwardRef<RefreshHandle, {
               <div className="meter" aria-hidden="true">
                 <i style={{ clipPath: `inset(0 ${100 - (totalShift ? Math.round((mine.length / totalShift) * 100) : 0)}% 0 0 round 999px)` }} />
               </div>
-              <p className="meter-cap">Zakończono <b>{mine.length}</b> z <b>{totalShift}</b> zgłoszeń dzisiaj</p>
-            </div>
+              <p className="meter-cap">Zakończono <b>{mine.length}</b> z <b>{totalShift}</b> zgłoszeń</p>
+            </section>
 
-            <div className="card side-card">
+            <section className="side-card">
               <h2 className="side-card-title">Skróty</h2>
               {!shortcuts && <p>Skróty jednoklawiszowe są wyłączone w Ustawieniach. Wyszukiwanie działa dalej:</p>}
               <dl className="shortcuts">
@@ -421,7 +412,7 @@ const UserQueue = forwardRef<RefreshHandle, {
                 </>}
                 <div><dt>Szukaj i przejdź</dt><dd><Kbd keys={['Ctrl', 'K']} /></dd></div>
               </dl>
-            </div>
+            </section>
           </aside>
         </div>
       )}
