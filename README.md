@@ -8,6 +8,17 @@ Web: React (panel admina/operatora)
 
 Mobile: Flutter (aplikacja klienta + tryb kiosku na tablecie)
 
+### Wersje panelu webowego (gałęzie)
+
+Panel webowy istnieje w dwóch wersjach, każda na osobnej gałęzi. Na obu gałęziach panel leży w katalogu `web/`, działa na tym samym porcie (5173), a backend, mobile, Docker Compose i ten README są identyczne — różni się wyłącznie wygląd panelu.
+
+| Gałąź | Wersja panelu | Typografia |
+|---|---|---|
+| `Dawid-web-wersja-1` | wersja 1 | Space Grotesk + Manrope |
+| `Dawid-web-wersja-2` | wersja 2 | Atkinson Hyperlegible Next (+ Mono do kodów biletów i tokenów) |
+
+Przełączenie wersji: `git checkout <gałąź>`, a potem `docker-compose up -d --build web` (albo zwykły restart dev-serwera).
+
 ---
 
 ## 1. Wymagania
@@ -107,7 +118,10 @@ Pełny opis modelu danych, endpointów REST i protokołu WebSocket: [`backend/AP
 
 ## 6. Wygląd / Design system
 
-Panel webowy i aplikacja mobilna dzielą ten sam design system (marka teal `#0FB5AB`, neutralne chłodne szarości, typografia Space Grotesk/Manrope, zaokrąglone karty z miękkim cieniem) — zaimportowany z projektu Claude Design i zaaplikowany 1:1 po obu stronach, łącznie ze wspólnym logiem eQue.
+Panel webowy i aplikacja mobilna dzielą ten sam design system (marka teal `#0FB5AB`, neutralne chłodne szarości, zaokrąglone karty) — zaimportowany z projektu Claude Design, łącznie ze wspólnym logiem eQue.
+
+* **Wersja 1 panelu** (`Dawid-web-wersja-1`): typografia Space Grotesk/Manrope i karty z miękkim cieniem, 1:1 z aplikacją mobilną.
+* **Wersja 2 panelu** (`Dawid-web-wersja-2`): te same kolory, ale jeden krój Atkinson Hyperlegible Next (zaprojektowany pod czytelność), Atkinson Hyperlegible Mono tylko do kodów biletów i tokenów (0/O i 1/l nie do pomylenia), promienie zależne od roli elementu i cienie wyłącznie na warstwach pływających.
 
 ---
 
