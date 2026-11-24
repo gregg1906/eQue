@@ -23,7 +23,7 @@ const UserHome = forwardRef<RefreshHandle, {
   currentUserId: string;
   onOpenQueue: (locationId?: number) => void;
 }>(function UserHome({ locationIds, currentUserId, onOpenQueue }, ref) {
-  const { sort, toggle, indicator } = useTableSort<HomeSortKey>('name');
+  const { sort, toggle, indicator } = useTableSort<HomeSortKey>();
   const [myLocations, setMyLocations] = useState<LocationResponse[]>([]);
   const [queues, setQueues] = useState<Record<number, QueueResponse>>({});
   const [loaded, setLoaded] = useState(false);

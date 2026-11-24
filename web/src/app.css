@@ -325,6 +325,6 @@
   font: inherit; color: inherit; white-space: nowrap; border-radius: var(--radius-sm);
 }
 .sort-btn:hover, .sort-btn.is-sorted { color: var(--text-strong); }
-.sort-ico { width: 10px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.sort-ico path { opacity: .35; }
-.sort-ico path.is-on { opacity: 1; stroke: var(--text-brand); }
+.sort-ico { width: 10px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity var(--dur-fast); }
+.sort-btn:hover .sort-ico, .sort-btn:focus-visible .sort-ico { opacity: .4; }
+.sort-btn.is-sorted .sort-ico { opacity: 1; stroke: var(--text-brand); }

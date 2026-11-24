@@ -5,20 +5,19 @@ export interface SortState<K extends string> { key: K; dir: SortDir }
 
 /**
   Sortowanie tabeli po kliknięciu nagłówka — naraz tylko jedna kolumna.
-  Kolumna inna niż domyślna: A→Z → Z→A → z powrotem do domyślnego porządku.
-  Kolumna domyślna (tabela jest już po niej posortowana A→Z): Z→A → domyślny.
+  Kliknięcia tej samej kolumny: A→Z → Z→A → z powrotem do domyślnego porządku tabeli.
+  Kliknięcie innej kolumny zaczyna od A→Z i zdejmuje sortowanie z poprzedniej.
 */
-export function useTableSort<K extends string>(defaultKey: K) {
+export function useTableSort<K extends string>() {
   const [sort, setSort] = useState<SortState<K> | null>(null);
 
   const toggle = (key: K) => setSort(prev => {
-    if (key === defaultKey) return prev?.key === key ? null : { key, dir: 'desc' };
     if (prev?.key !== key) return { key, dir: 'asc' };
     return prev.dir === 'asc' ? { key, dir: 'desc' } : null;
   });
 
-  /** Strzałka do pokazania przy kolumnie: wybrany kierunek, a bez sortowania — domyślny porządek. */
-  const indicator = (key: K): SortDir | null => (sort ? (sort.key === key ? sort.dir : null) : key === defaultKey ? 'asc' : null);
+  /** Kierunek do pokazania przy kolumnie; null = kolumna nie jest sortowana (bez strzałki). */
+  const indicator = (key: K): SortDir | null => (sort?.key === key ? sort.dir : null);
 
   return { sort, toggle, indicator };
 }

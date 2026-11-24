@@ -32,7 +32,7 @@ interface Issue {
 }
 
 const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: NavigateOptions) => void }>(function AdminHome({ onNavigate }, ref) {
-  const { sort, toggle, indicator } = useTableSort<HomeSortKey>('name');
+  const { sort, toggle, indicator } = useTableSort<HomeSortKey>();
   const [tablets, setTablets] = useState<TabletResponse[]>([]);
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [locations, setLocations] = useState<LocationResponse[]>([]);

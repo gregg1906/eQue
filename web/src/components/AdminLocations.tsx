@@ -190,28 +190,6 @@ const AdminLocations = forwardRef<RefreshHandle, {
     return () => clearTimeout(id);
   }, [editId, loading, locations, onEditHandled]);
 
-  const handleToggleActive = async (next: boolean) => {
-    if (!draft) return;
-    if (!next) {
-      const ok = await confirmDialog(
-        `Dezaktywować lokalizację „${draft.name}”? Przypisany kiosk i operatorzy zostaną od niej odłączeni.`,
-        { title: 'Dezaktywuj lokalizację', tone: 'danger', confirmLabel: 'Dezaktywuj' }
-      );
-      if (!ok) return;
-    }
-    try {
-      const updated = await api.post<LocationResponse>(`/admin/locations/${draft.id}/${next ? 'activate' : 'deactivate'}`);
-      setLocations(prev => prev.map(l => l.id === updated.id ? updated : l));
-      setDraft(d => d && d.id === updated.id
-        ? { ...d, is_active: updated.is_active, tablet_id: updated.tablet?.id ?? null, user_ids: [...updated.user_ids] }
-        : d);
-      showToast(`${updated.is_active ? 'Aktywowano' : 'Dezaktywowano'} lokalizację: ${updated.name}.`);
-      refetch();
-    } catch (err) {
-      showToast(errorMessage(err, 'Nie udało się zmienić statusu lokalizacji'), { tone: 'error' });
-    }
-  };
-
   const handleDeleteLocation = async () => {
     if (!draft) return;
     const ok = await confirmDialog(
@@ -237,15 +215,35 @@ const AdminLocations = forwardRef<RefreshHandle, {
       setEditError('Nazwa nie może być pusta. Wpisz np. Gabinet 12.');
       return;
     }
+
+    // Status lokalizacji jest częścią formularza: zmiana wchodzi w życie dopiero po „Zapisz”.
+    // Porównujemy z rekordem z serwera, więc ponowny zapis po częściowym błędzie nie powtarza udanego kroku.
+    const stored = locations.find(l => l.id === draft.id);
+    const activating = !!stored && !stored.is_active && draft.is_active;
+    const deactivating = !!stored && stored.is_active && !draft.is_active;
+    if (deactivating) {
+      const ok = await confirmDialog(
+        `Dezaktywować lokalizację „${draft.name}”? Przypisany kiosk i operatorzy zostaną od niej odłączeni.`,
+        { title: 'Dezaktywuj lokalizację', tone: 'danger', confirmLabel: 'Dezaktywuj' }
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
-      const updated = await api.put<LocationResponse>(`/admin/locations/${draft.id}`, {
+      const sync = (l: LocationResponse) => setLocations(prev => prev.map(x => x.id === l.id ? l : x));
+      if (activating) sync(await api.post<LocationResponse>(`/admin/locations/${draft.id}/activate`));
+      let updated = await api.put<LocationResponse>(`/admin/locations/${draft.id}`, {
         name: draft.name.trim(),
         description: draft.description,
-        tablet_id: draft.tablet_id,
-        user_ids: draft.user_ids,
+        // dezaktywacja i tak odłącza kiosk i operatorów — nie wysyłamy ich
+        ...(deactivating ? {} : { tablet_id: draft.tablet_id, user_ids: draft.user_ids }),
       });
-      setLocations(prev => prev.map(l => l.id === updated.id ? updated : l));
+      sync(updated);
+      if (deactivating) {
+        updated = await api.post<LocationResponse>(`/admin/locations/${draft.id}/deactivate`);
+        sync(updated);
+      }
       setEditOpen(false);
       showToast(`Zapisano zmiany: ${updated.name}.`);
       refetch();
@@ -260,7 +258,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
   const tabletById = new Map(tablets.map(t => [t.id, t]));
   const userById = new Map(users.map(u => [u.id, u]));
   const q = query.trim().toLowerCase();
-  const { sort, toggle, indicator } = useTableSort<LocationSortKey>('name');
+  const { sort, toggle, indicator } = useTableSort<LocationSortKey>();
   const filteredLocations = sortByName(
     locations.filter(l =>
       !q || [
@@ -394,7 +392,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
           <Button onClick={() => setEditOpen(false)}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleSaveEdit()} disabled={saving}>
-            {saving ? 'Zapisywanie…' : 'Zapisz zmiany'}
+            {saving ? 'Zapisywanie…' : 'Zapisz'}
           </Button>
         </>}
       >
@@ -456,7 +454,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
             ) : (
               <div className="note">
                 <Icon name="info" />
-                <span>Lokalizacja jest dezaktywowana. Aktywuj ją poniżej, żeby przypisać kiosk i operatorów.</span>
+                <span>{locations.find(l => l.id === draft.id)?.is_active ? 'Lokalizacja zostanie dezaktywowana po kliknięciu „Zapisz”, a kiosk i operatorzy zostaną od niej odłączeni.' : 'Lokalizacja jest dezaktywowana. Włącz „Lokalizacja aktywna” poniżej i zapisz, żeby przypisać kiosk i operatorów.'}</span>
               </div>
             )}
 
@@ -467,10 +465,10 @@ const AdminLocations = forwardRef<RefreshHandle, {
                   <span>
                     {draft.is_active
                       ? 'Dezaktywacja odłącza kiosk i operatorów, a klienci nie mogą dołączyć.'
-                      : 'Po aktywacji przypiszesz kiosk i operatorów.'}
+                      : 'Po włączeniu i zapisaniu przypiszesz kiosk i operatorów.'}
                   </span>
                 </div>
-                <Switch checked={draft.is_active} onChange={handleToggleActive} label="Lokalizacja aktywna" />
+                <Switch checked={draft.is_active} onChange={is_active => setDraft({ ...draft, is_active })} label="Lokalizacja aktywna" />
               </div>
             </div>
 

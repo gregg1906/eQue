@@ -174,17 +174,37 @@ const AdminUsers = forwardRef<RefreshHandle, {
     setEditErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
+    // Status konta jest częścią formularza: zmiana wchodzi w życie dopiero po „Zapisz”.
+    // Porównujemy z rekordem z serwera, więc ponowny zapis po częściowym błędzie nie powtarza udanego kroku.
+    const stored = users.find(u => u.id === editUser.id);
+    const activating = !!stored && !stored.is_active && editUser.is_active;
+    const deactivating = !!stored && stored.is_active && !editUser.is_active;
+    if (deactivating) {
+      const ok = await confirmDialog(
+        `Dezaktywować konto „${editUser.full_name}”? Zostanie odłączone od przypisanych lokalizacji i nie będzie mogło się zalogować.`,
+        { title: 'Dezaktywuj konto', tone: 'danger', confirmLabel: 'Dezaktywuj' }
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
-      const updated = await api.put<UserResponse>(`/admin/users/${editUser.id}`, {
+      const sync = (u: UserResponse) => setUsers(prev => prev.map(x => x.id === u.id ? u : x));
+      if (activating) sync(await api.post<UserResponse>(`/admin/users/${editUser.id}/activate`));
+      let updated = await api.put<UserResponse>(`/admin/users/${editUser.id}`, {
         username: editUser.username.trim(),
         full_name: editUser.full_name.trim(),
         position: editUser.position,
         role: editUser.role,
         password: editPassword.trim() !== '' ? editPassword : undefined,
-        location_ids: editUser.location_ids,
+        // dezaktywacja i tak czyści przypisania — nie wysyłamy ich, żeby nie robić tego dwa razy
+        location_ids: deactivating ? undefined : editUser.location_ids,
       });
-      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+      sync(updated);
+      if (deactivating) {
+        updated = await api.post<UserResponse>(`/admin/users/${editUser.id}/deactivate`);
+        sync(updated);
+      }
       setEditOpen(false);
       showToast(`Zapisano zmiany: ${updated.full_name}.`);
     } catch (err) {
@@ -220,18 +240,6 @@ const AdminUsers = forwardRef<RefreshHandle, {
     }
   };
 
-  const handleToggleActive = async (next: boolean) => {
-    if (!editUser) return;
-    if (!next) {
-      const ok = await confirmDialog(
-        `Dezaktywować konto „${editUser.full_name}”? Zostanie odłączone od przypisanych lokalizacji i nie będzie mogło się zalogować.`,
-        { title: 'Dezaktywuj konto', tone: 'danger', confirmLabel: 'Dezaktywuj' }
-      );
-      if (!ok) return;
-    }
-    await setActive(next);
-  };
-
   const setActive = async (next: boolean) => {
     if (!editUser) return;
     try {
@@ -247,7 +255,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
   // ——— lista ———
   const locationById = new Map(locations.map(l => [l.id, l]));
   const q = query.trim().toLowerCase();
-  const { sort, toggle, indicator } = useTableSort<UserSortKey>('name');
+  const { sort, toggle, indicator } = useTableSort<UserSortKey>();
   const byName = (a: UserResponse, b: UserResponse) => a.full_name.localeCompare(b.full_name, 'pl');
   const locationNames = (u: UserResponse) => u.location_ids.map(id => locationById.get(id)?.name).filter(Boolean).join(', ');
   const filteredUsers = sortByName(
@@ -387,7 +395,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
           <Button onClick={() => setEditOpen(false)}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleSaveEdit()} disabled={saving}>
-            {saving ? 'Zapisywanie…' : 'Zapisz zmiany'}
+            {saving ? 'Zapisywanie…' : 'Zapisz'}
           </Button>
         </>}
       >
@@ -442,7 +450,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
                   </div>
                 </Field>
               ) : (
-                <div className="note"><Icon name="info" /><span>Konto jest dezaktywowane. Aktywuj je poniżej, żeby przypisać lokalizacje.</span></div>
+                <div className="note"><Icon name="info" /><span>{users.find(u => u.id === editUser.id)?.is_active ? 'Konto zostanie dezaktywowane po kliknięciu „Zapisz” i odłączone od lokalizacji.' : 'Konto jest dezaktywowane. Włącz „Konto aktywne” poniżej i zapisz, żeby przypisać lokalizacje.'}</span></div>
               )
             ) : (
               <div className="note"><Icon name="shield" /><span>Administratorzy mają dostęp do wszystkich lokalizacji. Przypisanie do konkretnych lokalizacji nie dotyczy tej roli.</span></div>
@@ -455,10 +463,10 @@ const AdminUsers = forwardRef<RefreshHandle, {
                   <span>
                     {editUser.is_active
                       ? 'Dezaktywowane konto nie może się zalogować i traci przypisania.'
-                      : 'Po aktywacji ta osoba znowu może się zalogować.'}
+                      : 'Po włączeniu i zapisaniu ta osoba znowu może się zalogować.'}
                   </span>
                 </div>
-                <Switch checked={editUser.is_active} onChange={handleToggleActive} label="Konto aktywne" />
+                <Switch checked={editUser.is_active} onChange={is_active => setEditUser({ ...editUser, is_active })} label="Konto aktywne" />
               </div>
             </div>
 

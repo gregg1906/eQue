@@ -135,25 +135,8 @@ const AdminDashboard = forwardRef<RefreshHandle, {
 
   const applyUpdated = (updated: TabletResponse) => {
     setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
-    setEditing(prev => prev && prev.id === updated.id ? { ...prev, is_active: updated.is_active, location_id: updated.location_id, pairing_token: updated.pairing_token, online: updated.online } : prev);
-  };
-
-  const handleToggleActive = async (next: boolean) => {
-    if (!editing) return;
-    if (!next) {
-      const ok = await confirmDialog(
-        `Dezaktywować tablet „${editing.name || 'bez nazwy'}”? Zostanie odłączony od lokalizacji, a na jego ekranie pojawi się komunikat o wyłączeniu. Token zostaje zapamiętany, więc po ponownym włączeniu tablet wróci sam.`,
-        { title: 'Dezaktywuj tablet', tone: 'danger', confirmLabel: 'Dezaktywuj' }
-      );
-      if (!ok) return;
-    }
-    try {
-      const updated = await api.post<TabletResponse>(`/admin/tablets/${editing.id}/${next ? 'activate' : 'deactivate'}`);
-      applyUpdated(updated);
-      showToast(`${updated.is_active ? 'Aktywowano' : 'Dezaktywowano'} tablet: ${updated.name || 'bez nazwy'}.`);
-    } catch (err) {
-      showToast(errorMessage(err, 'Nie udało się zmienić statusu tabletu'), { tone: 'error' });
-    }
+    // tylko pola, których nie ma w formularzu — nie nadpisujemy niezapisanych zmian (nazwa, lokalizacja, status)
+    setEditing(prev => prev && prev.id === updated.id ? { ...prev, pairing_token: updated.pairing_token, online: updated.online } : prev);
   };
 
   const handleResetPairing = async () => {
@@ -175,13 +158,34 @@ const AdminDashboard = forwardRef<RefreshHandle, {
   const handleSaveEdit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!editing) return;
+
+    // Status tabletu jest częścią formularza: zmiana wchodzi w życie dopiero po „Zapisz”.
+    // Porównujemy z rekordem z serwera, więc ponowny zapis po częściowym błędzie nie powtarza udanego kroku.
+    const stored = devices.find(d => d.id === editing.id);
+    const activating = !!stored && !stored.is_active && editing.is_active;
+    const deactivating = !!stored && stored.is_active && !editing.is_active;
+    if (deactivating) {
+      const ok = await confirmDialog(
+        `Dezaktywować tablet „${editing.name || 'bez nazwy'}”? Zostanie odłączony od lokalizacji, a na jego ekranie pojawi się komunikat o wyłączeniu. Token zostaje zapamiętany, więc po ponownym włączeniu tablet wróci sam.`,
+        { title: 'Dezaktywuj tablet', tone: 'danger', confirmLabel: 'Dezaktywuj' }
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
-      const updated = await api.put<TabletResponse>(`/admin/tablets/${editing.id}`, {
+      const sync = (t: TabletResponse) => setDevices(prev => prev.map(d => d.id === t.id ? t : d));
+      if (activating) sync(await api.post<TabletResponse>(`/admin/tablets/${editing.id}/activate`));
+      let updated = await api.put<TabletResponse>(`/admin/tablets/${editing.id}`, {
         name: editing.name,
-        location_id: editing.location_id,
+        // dezaktywacja i tak odłącza tablet od lokalizacji — nie wysyłamy jej
+        ...(deactivating ? {} : { location_id: editing.location_id }),
       });
-      setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
+      sync(updated);
+      if (deactivating) {
+        updated = await api.post<TabletResponse>(`/admin/tablets/${editing.id}/deactivate`);
+        sync(updated);
+      }
       setEditOpen(false);
       showToast(`Zapisano zmiany: ${updated.name || 'tablet bez nazwy'}.`);
       refetch();
@@ -242,7 +246,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
   // ——— lista ———
   const locationById = new Map(locations.map(l => [l.id, l]));
   const q = query.trim().toLowerCase();
-  const { sort, toggle, indicator } = useTableSort<TabletSortKey>('name');
+  const { sort, toggle, indicator } = useTableSort<TabletSortKey>();
   const filteredDevices = sortByName(
     devices.filter(d =>
       !q || [
@@ -376,7 +380,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
           <Button onClick={() => setEditOpen(false)}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleSaveEdit()} disabled={saving}>
-            {saving ? 'Zapisywanie…' : 'Zapisz zmiany'}
+            {saving ? 'Zapisywanie…' : 'Zapisz'}
           </Button>
         </>}
       >
@@ -391,7 +395,7 @@ const AdminDashboard = forwardRef<RefreshHandle, {
               <Input maxLength={100} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="np. Tablet hol główny" />
             </Field>
 
-            <Field label="Lokalizacja" hint={!editing.is_active ? 'Aktywuj tablet, aby przypisać go do lokalizacji.' : undefined}>
+            <Field label="Lokalizacja" hint={!editing.is_active ? 'Włącz „Tablet aktywny” poniżej i zapisz, aby przypisać go do lokalizacji.' : undefined}>
               <Select
                 value={editing.location_id !== null ? String(editing.location_id) : ''}
                 disabled={!editing.is_active}
@@ -423,10 +427,10 @@ const AdminDashboard = forwardRef<RefreshHandle, {
                   <span>
                     {editing.is_active
                       ? 'Dezaktywowany tablet pokazuje komunikat o wyłączeniu i jest odłączony od lokalizacji.'
-                      : 'Po aktywacji tablet wróci sam — token jest zapamiętany.'}
+                      : 'Po włączeniu i zapisaniu tablet wróci sam — token jest zapamiętany.'}
                   </span>
                 </div>
-                <Switch checked={editing.is_active} onChange={handleToggleActive} label="Tablet aktywny" />
+                <Switch checked={editing.is_active} onChange={is_active => setEditing({ ...editing, is_active })} label="Tablet aktywny" />
               </div>
             </div>
 
