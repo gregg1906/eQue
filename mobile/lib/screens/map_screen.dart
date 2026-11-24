@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/eque_theme.dart';
 import '../widgets/eque_card.dart';
 import '../widgets/eque_logo.dart';
+import 'settings_screen.dart';
 
 class Placowka {
   final String id;
@@ -89,12 +90,29 @@ class _MapScreenState extends State<MapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const EQueBrand(markSize: 26, fontSize: 18)),
+      appBar: AppBar(
+        title: EQueBrand(markSize: 26, fontSize: 18,
+        inverse: Theme.of(context).brightness == Brightness.dark
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Ustawienia',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
+        ),
       body: _budujCialoEkranu(),
     );
   }
 
   Widget _budujCialoEkranu() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (_isLoading) {
       return Center(
         child: Column(
@@ -192,7 +210,7 @@ class _MapScreenState extends State<MapScreen> {
                       children: [
                         Text(
                           _wybranaPlacowka!.name,
-                          style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 15.5, color: EQueColors.textStrong),
+                          style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 15.5, color: isDark ? Colors.white : EQueColors.textStrong),
                         ),
                         const SizedBox(height: 2),
                         Text(

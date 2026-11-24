@@ -49,6 +49,8 @@ class JoinQueueResponse(BaseModel):
     queue_position: int
     location_id: int
     estimated_wait_time_minutes: int
+    # Ile osób czeka teraz w tej kolejce (razem z tym biletem) — do wskaźnika „pozycja / łącznie” w aplikacji.
+    total_in_queue: int | None = None
 
 class PatientCancelRequest(BaseModel):
     """
@@ -71,6 +73,7 @@ class TicketStatusResponse(BaseModel):
     status: str
     queue_position: int
     estimated_wait_time_minutes: int
+    total_in_queue: int | None = None
 
 
 class TicketResponse(BaseModel):

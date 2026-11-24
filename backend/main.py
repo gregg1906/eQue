@@ -1064,6 +1064,9 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
         payload={"ticket": _ticket_to_response(ticket).model_dump()},
     )
 
+    # Ten sam bilet zmienia „łącznie w kolejce” u pozostałych czekających — wyślij im odświeżenie.
+    await _broadcast_queue_updates(request.app.state.redis, location_id, db)
+
     estimated_wait_time_minutes = queue_position * 3
 
     return JoinQueueResponse(
@@ -1072,6 +1075,7 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
         queue_position=queue_position,
         location_id=ticket.location_id,
         estimated_wait_time_minutes=estimated_wait_time_minutes,
+        total_in_queue=queue_position + 1,
     )
 
 
@@ -1104,6 +1108,7 @@ async def get_ticket_status(ticket_code: str, db: Session = Depends(get_db)):
 
     queue_position = 0
     estimated_wait_time_minutes = 0
+    total_in_queue = None
     if ticket.status == "WAITING":
         queue_position = db.query(models.Ticket).filter(
             models.Ticket.location_id == ticket.location_id,
@@ -1111,12 +1116,17 @@ async def get_ticket_status(ticket_code: str, db: Session = Depends(get_db)):
             models.Ticket.joined_at < ticket.joined_at,
         ).count()
         estimated_wait_time_minutes = queue_position * 3
+        total_in_queue = db.query(models.Ticket).filter(
+            models.Ticket.location_id == ticket.location_id,
+            models.Ticket.status == "WAITING",
+        ).count()
 
     return TicketStatusResponse(
         ticket_code=ticket.ticket_code,
         status=ticket.status,
         queue_position=queue_position,
         estimated_wait_time_minutes=estimated_wait_time_minutes,
+        total_in_queue=total_in_queue,
     )
 
 
@@ -1191,12 +1201,15 @@ async def _broadcast_queue_updates(redis_client, location_id: int, db: Session) 
         .all()
     )
 
+    total_in_queue = len(waiting_tickets)
+
     for idx, t in enumerate(waiting_tickets):
         update_msg = {
             "topic": f"guest:{t.ticket_code}",
             "event": "QUEUE_UPDATE",
             "queue_position": idx,
             "estimated_wait_time_minutes": idx * 3,
+            "total_in_queue": total_in_queue,
         }
         await redis_client.publish(REDIS_CHANNEL, json.dumps(update_msg, default=str))
 

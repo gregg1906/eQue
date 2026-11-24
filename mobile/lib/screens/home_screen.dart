@@ -11,6 +11,7 @@ import 'map_screen.dart';
 import 'kiosk_login_screen.dart';
 import 'kiosk_qr_screen.dart';
 import 'queue_status_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -57,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (_sprawdzanieKiosku) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -64,12 +66,31 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const EQueBrand()),
+      
+      appBar: AppBar(
+        title: EQueBrand(
+          markSize: 26,
+          fontSize: 18,
+          inverse: Theme.of(context).brightness == Brightness.dark,
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Ustawienia',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
+        ),
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               GestureDetector(
                 onLongPress: () {
@@ -123,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Masz aktywny bilet', style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 15, color: EQueColors.textStrong)),
+                            Text('Masz aktywny bilet', style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 15, color: isDark ? Colors.white : EQueColors.textStrong)),
                             const SizedBox(height: 2),
                             Text('Kliknij, aby wrócić do podglądu kolejki.', style: GoogleFonts.manrope(fontSize: 12.5, color: EQueColors.textMuted)),
                           ],
@@ -181,10 +202,17 @@ class _MenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EQueCard(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      onTap: onTap,
-      child: Row(
+
+final isDark = Theme.of(context).brightness == Brightness.dark;
+
+ return Semantics(
+      button: true, // Informuje lektora: "Powiedz użytkownikowi, że to jest przycisk"
+      label: '$title. $subtitle', // Łączy tytuł i opis w jedno zdanie
+      excludeSemantics: true, // Ukrywa wizualne "wnętrzności" przed lektorem
+      child: EQueCard(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        onTap: onTap,
+        child: Row(
         children: [
           Container(
             width: 48,
@@ -199,14 +227,15 @@ class _MenuButton extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 15.5, color: EQueColors.textStrong)),
+                Text(title, style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 15.5, color: isDark ? Colors.white : EQueColors.textStrong)),
                 const SizedBox(height: 2),
-                Text(subtitle, style: GoogleFonts.manrope(fontSize: 13, color: EQueColors.textMuted)),
+                Text(subtitle, style: GoogleFonts.manrope(fontSize: 13, color: isDark ? Colors.white70 : EQueColors.textMuted)),
               ],
             ),
           ),
           const Icon(Icons.chevron_right, size: 20, color: EQueColors.textFaint),
         ],
+      ),
       ),
     );
   }
