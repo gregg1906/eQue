@@ -97,11 +97,19 @@ class TicketHistoryEntry(TicketResponse):
     """Zakończony bilet w historii zmiany — z imieniem osoby, która go obsłużyła."""
     served_by_name: Optional[str] = None
 
+class ServingTicket(TicketResponse):
+    """Wezwany bilet (SERVING) z imieniem operatora, który go wezwał — do listy „Inne stanowiska”."""
+    served_by_name: Optional[str] = None
+
+
 class QueueResponse(BaseModel):
     """Odpowiedź GET /admin/locations/{id}/queue."""
     location_id: int
     waiting: list[TicketResponse]
+    # Ostatnio wezwany bilet — zostaje dla zgodności (kiosk, starsza wersja panelu).
     serving: Optional[TicketResponse] = None
+    # Wszystkie wezwane bilety, po jednym na operatora (P2), od najdawniej wezwanego.
+    serving_all: list[ServingTicket] = []
 
 
 class TabletCreate(BaseModel):

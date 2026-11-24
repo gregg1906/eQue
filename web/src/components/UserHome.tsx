@@ -93,7 +93,7 @@ const UserHome = forwardRef<RefreshHandle, {
     : { tone: 'paused' as const, label: 'Wstrzymane' };
   const sortedLocations = sortRows(defaultOrder, sort, {
     name: l => l.name,
-    serving: l => queueOf(l)?.serving?.ticket_code,
+    serving: l => queueOf(l)?.serving_all[0]?.ticket_code,
     waiting: l => { const q = queueOf(l); return q ? q.waiting.length : null; },
     longest: l => { const q = queueOf(l); return q?.waiting[0] ? minutesSince(q.waiting[0].joined_at) : null; },
     signups: l => signupStatus(l).label,
@@ -176,7 +176,7 @@ const UserHome = forwardRef<RefreshHandle, {
                     title={loc.is_active ? 'Przejdź do kolejki tej lokalizacji' : undefined}
                   >
                     <td><div className="cell-main"><QueueLetter letter={loc.queue_code} off={!loc.is_active} /><b>{loc.name}</b></div></td>
-                    <td>{q?.serving ? <TicketCode code={q.serving.ticket_code} state="called" /> : <span className="muted">Nikt</span>}</td>
+                    <td>{q?.serving_all.length ? <span className="serving-codes">{q.serving_all.map(t => <TicketCode key={t.id} code={t.ticket_code} state="called" />)}</span> : <span className="muted">Nikt</span>}</td>
                     <td className="num">{q ? q.waiting.length : '–'}</td>
                     <td className="num">
                       {wait === null ? <span className="muted">–</span> : <span className={wait >= LONG_WAIT_MIN ? 'text-warn' : undefined}>{wait} min</span>}

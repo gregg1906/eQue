@@ -150,6 +150,16 @@
 .serving-paused .icon { width: 15px; height: 15px; }
 .serving-panel.is-empty .serving-paused { background: var(--queue-paused-bg); color: var(--text-body); border-bottom: 1px solid var(--border-subtle); }
 
+/* „Inne stanowiska” — kto jest wezwany przy pozostałych stanowiskach tej lokalizacji.
+   Informacja poboczna: bez karty i koloru tła, żeby nie konkurowała z panelem obsługi. */
+.other-desks { margin-top: -6px; }
+.other-desks-title { margin: 0 0 2px; padding: 0 8px; font-size: var(--text-sm); font-weight: 600; color: var(--text-body); }
+.other-desks ul { list-style: none; margin: 0; padding: 0; }
+.other-desks li { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 16px; align-items: center; min-height: 40px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); }
+.other-desks-who { min-width: 0; color: var(--text-strong); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.other-desks-since { font-size: var(--text-sm); color: var(--text-body); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.serving-codes { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
 .qlist-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .qlist-caption { color: var(--text-muted); font-size: var(--text-xs); margin: 0 0 8px; }
 /* lista jako wiersze z liniami, bez pudełka i cienia */
@@ -165,10 +175,14 @@
 .qwait { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .qwait.is-long, .qwait-inline.is-long { color: var(--queue-waiting); font-weight: 700; }
 /* „Wezwij” widać zawsze — ukrywanie akcji do czasu najechania nie działa na ekranach dotykowych i z klawiatury */
+.qlist-actions { display: flex; align-items: center; gap: 4px; }
 .qlist .qlist-action { opacity: .9; }
+/* „Anuluj” jest drugorzędne i odwracalne („Cofnij”) — cichy tekst, bez czerwieni */
+.qlist .qlist-cancel { color: var(--text-body); font-weight: 500; }
 @media (hover: hover) and (pointer: fine) {
   .qlist li:hover { background: color-mix(in srgb, var(--surface-sunken) 60%, transparent); }
   .qlist li:not(:hover):not(:focus-within):not(:first-child) .qlist-action { border-color: var(--border-subtle); color: var(--text-muted); }
+  .qlist .qlist-cancel:hover:not(:disabled) { color: var(--text-strong); }
 }
 
 /* kolumna boczna zmiany: sekcje rozdzielone linią, bez kart */
@@ -198,6 +212,8 @@
   .serving-actions .btn { flex: 1 1 100%; white-space: normal; height: auto; min-height: 46px; padding-block: 10px; }
   .serving-actions kbd { display: none; }
   .qlist li { grid-template-columns: 60px minmax(0, 1fr) auto; padding: 10px 4px; gap: 12px; }
+  .other-desks li { grid-template-columns: 60px minmax(0, 1fr) auto; gap: 12px; padding-inline: 4px; }
+  .other-desks-title { padding-inline: 4px; }
   .qlist .qpos, .qlist .qwait, .qlist .qlist-spacer { display: none; }
   .qname .qwait-inline { display: inline; }
 }

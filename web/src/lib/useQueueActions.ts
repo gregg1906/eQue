@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ApiError, errorDetail, getToken, notifyUnauthorized } from './api';
-import type { LocationResponse, QueueResponse, TicketResponse } from './apiTypes';
+import type { LocationResponse, QueueResponse, ServingTicket, TicketResponse } from './apiTypes';
 import { getPreferences } from './preferences';
 import { nowIso } from './time';
 import { dismissToast, showToast } from '../components/ui/useToast';
 
 /*
-  „Cofnij” bez endpointu cofania (backend ma tylko call / complete / cancel / pause-queue / resume-queue):
+  „Cofnij” bez endpointu cofania (backend ma tylko call / call-next / complete / cancel / pause-queue / resume-queue):
   1. akcja od razu zmienia UI (nakładka na stan z serwera) i pokazuje powiadomienie z „Cofnij”
      na 6, 10 albo 20 s — długość okna wybiera użytkownik w Ustawieniach (WCAG 2.2.1),
   2. żądanie idzie dopiero po upływie okna albo od razu, gdy operator wykona kolejną akcję (najpierw oczekująca),
@@ -18,9 +18,15 @@ import { dismissToast, showToast } from '../components/ui/useToast';
 */
 
 export type QueueAction =
-  /** Obsłużono / nie zgłosił się, opcjonalnie z wezwaniem następnej osoby — jako jedna akcja. */
-  | { kind: 'resolve'; locationId: number; ticket: TicketResponse; outcome: 'done' | 'noshow'; next: TicketResponse | null }
-  | { kind: 'call'; locationId: number; ticket: TicketResponse }
+  /**
+    Obsłużono / nie zgłosił się, opcjonalnie z wezwaniem następnej osoby — jako jedna akcja.
+    Następną osobę wybiera serwer (call-next), `next` to tylko przewidywanie do podglądu.
+  */
+  | { kind: 'resolve'; locationId: number; operatorId: string; ticket: TicketResponse; outcome: 'done' | 'noshow'; next: TicketResponse | null }
+  /** `viaNext` — „wezwij następnego” (wybór po stronie serwera), inaczej ten konkretny bilet z listy. */
+  | { kind: 'call'; locationId: number; operatorId: string; ticket: TicketResponse; viaNext: boolean }
+  /** Anulowanie czekającego biletu przez operatora (np. osoba wyszła). */
+  | { kind: 'cancel'; locationId: number; ticket: TicketResponse }
   | { kind: 'accepting'; locationId: number; locationName: string; accepting: boolean };
 
 export interface Entry {
@@ -39,11 +45,13 @@ function stepsFor(action: QueueAction): string[] {
   switch (action.kind) {
     case 'resolve': {
       const steps = [`/admin/tickets/${action.ticket.id}/${action.outcome === 'done' ? 'complete' : 'cancel?reason=NO_SHOW'}`];
-      if (action.next) steps.push(`/admin/tickets/${action.next.id}/call`);
+      if (action.next) steps.push(`/admin/locations/${action.locationId}/call-next`);
       return steps;
     }
     case 'call':
-      return [`/admin/tickets/${action.ticket.id}/call`];
+      return [action.viaNext ? `/admin/locations/${action.locationId}/call-next` : `/admin/tickets/${action.ticket.id}/call`];
+    case 'cancel':
+      return [`/admin/tickets/${action.ticket.id}/cancel?reason=STAFF_CANCELLED`];
     case 'accepting':
       return [`/admin/locations/${action.locationId}/${action.accepting ? 'resume-queue' : 'pause-queue'}`];
   }
@@ -63,7 +71,8 @@ async function post(path: string, token: string | null): Promise<unknown> {
 }
 
 function errorText(err: unknown) {
-  return err instanceof ApiError ? err.message : 'brak połączenia z serwerem';
+  // komunikaty serwera bywają zakończone kropką — tu doklejamy własną
+  return err instanceof ApiError ? err.message.replace(/\.\s*$/, '') : 'brak połączenia z serwerem';
 }
 
 function failureMessage(action: QueueAction, succeeded: boolean[], err: unknown): string {
@@ -71,11 +80,13 @@ function failureMessage(action: QueueAction, succeeded: boolean[], err: unknown)
   switch (action.kind) {
     case 'resolve': {
       const code = action.ticket.ticket_code;
-      if (succeeded[0] && action.next) return `Zapisano ${code}, ale nie udało się wezwać ${action.next.ticket_code}: ${why}.`;
+      if (succeeded[0] && action.next) return `Zapisano ${code}, ale nie udało się wezwać następnej osoby: ${why}.`;
       return `Nie udało się zakończyć ${code}: ${why}. Przywrócono poprzedni stan.`;
     }
     case 'call':
-      return `Nie udało się wezwać ${action.ticket.ticket_code}: ${why}. Przywrócono poprzedni stan.`;
+      return `Nie udało się wezwać ${action.viaNext ? 'następnej osoby' : action.ticket.ticket_code}: ${why}. Przywrócono poprzedni stan.`;
+    case 'cancel':
+      return `Nie udało się anulować ${action.ticket.ticket_code}: ${why}. Przywrócono poprzedni stan.`;
     case 'accepting':
       return `Nie udało się ${action.accepting ? 'wznowić' : 'wstrzymać'} zapisów: ${why}. Przywrócono poprzedni stan.`;
   }
@@ -85,6 +96,7 @@ function undoMessage(action: QueueAction): string {
   switch (action.kind) {
     case 'resolve': return `Cofnięto. Obsługiwany jest znowu ${action.ticket.ticket_code}.`;
     case 'call': return `Cofnięto wezwanie ${action.ticket.ticket_code}.`;
+    case 'cancel': return `Cofnięto. ${action.ticket.ticket_code} czeka dalej w kolejce.`;
     case 'accepting': return `Cofnięto. Zapisy są znowu ${action.accepting ? 'wstrzymane' : 'otwarte'}.`;
   }
 }
@@ -137,13 +149,13 @@ class QueueActionController {
     if (toastId !== undefined) dismissToast(toastId);
     this.toastIds.delete(id);
     this.set(this.entries.map(e => (e.id === id ? { ...e, status: 'sending' } : e)));
-    const run = () => this.send(entry, mode);
+    const run = () => this.send(entry);
     // Przy zamykaniu strony nie czekamy na kolejkę — żądania (keepalive) muszą wyjść od razu.
     if (mode === 'parallel') void run();
     else this.chain = this.chain.then(run, run);
   }
 
-  private async send(entry: Entry, mode: FlushMode) {
+  private async send(entry: Entry) {
     const steps = stepsFor(entry.action);
     // bieżący token ma pierwszeństwo — w trakcie okna „Cofnij” mógł zostać odnowiony
     const token = getToken() ?? entry.token;
@@ -151,22 +163,16 @@ class QueueActionController {
     let result: unknown;
     let error: unknown = null;
 
-    if (mode === 'parallel') {
-      // Kroki dotyczą różnych biletów (complete obecnego, call następnego), więc kolejność nie jest wymagana.
-      const settled = await Promise.allSettled(steps.map(path => post(path, token)));
-      settled.forEach((r, i) => {
-        if (r.status === 'fulfilled') { succeeded[i] = true; result = r.value; }
-        else if (error === null) error = r.reason;
-      });
-    } else {
-      for (let i = 0; i < steps.length; i++) {
-        try {
-          result = await post(steps[i], token);
-          succeeded[i] = true;
-        } catch (err) {
-          error = err;
-          break;
-        }
+    // Kroki jednej akcji zawsze po kolei: serwer pozwala operatorowi mieć najwyżej jeden wezwany
+    // bilet, więc wezwanie następnej osoby musi dojść po zakończeniu obecnej. Tryb 'parallel'
+    // (zamykanie strony) oznacza tylko, że akcje nie czekają na siebie nawzajem.
+    for (let i = 0; i < steps.length; i++) {
+      try {
+        result = await post(steps[i], token);
+        succeeded[i] = true;
+      } catch (err) {
+        error = err;
+        break;
       }
     }
 
@@ -222,30 +228,38 @@ export function useQueueActions(afterSend: AfterSend) {
   return { entries, perform: controller.perform };
 }
 
-function callInto(serving: TicketResponse | null, waiting: TicketResponse[], ticket: TicketResponse, at: string) {
+type Serving = ServingTicket[];
+
+function callInto(servingAll: Serving, waiting: TicketResponse[], ticket: TicketResponse, viaNext: boolean, operatorId: string, at: string) {
+  // „Wezwij następnego”: gdy przewidziany bilet wezwał już ktoś inny, serwer wybierze kolejny czekający.
+  const target = waiting.find(w => w.id === ticket.id) ?? (viaNext ? waiting[0] : undefined);
   // bilet już nie czeka (serwer przetworzył wezwanie albo bilet zniknął) — zostaje stan z serwera
-  if (!waiting.some(w => w.id === ticket.id)) return { serving, waiting };
+  if (!target) return { servingAll, waiting };
   return {
-    serving: { ...ticket, status: 'SERVING' as const, called_at: at },
-    waiting: waiting.filter(w => w.id !== ticket.id),
+    servingAll: [...servingAll, { ...target, status: 'SERVING' as const, called_at: at, served_by_user_id: operatorId, served_by_name: null }],
+    waiting: waiting.filter(w => w.id !== target.id),
   };
 }
 
 /** Kolejka z nałożonymi akcjami, które jeszcze nie doszły do serwera. */
 export function applyQueueActions(queue: QueueResponse, entries: { action: QueueAction; at: string }[]): QueueResponse {
-  let serving = queue.serving;
+  const initial: Serving = queue.serving_all ?? (queue.serving ? [{ ...queue.serving, served_by_name: null }] : []);
+  let servingAll = initial;
   let waiting = queue.waiting;
   for (const { action, at } of entries) {
     if (action.locationId !== queue.location_id) continue;
     if (action.kind === 'resolve') {
-      if (serving?.id === action.ticket.id) serving = null;
+      servingAll = servingAll.filter(t => t.id !== action.ticket.id);
       waiting = waiting.filter(w => w.id !== action.ticket.id);
-      if (action.next) ({ serving, waiting } = callInto(serving, waiting, action.next, at));
+      if (action.next) ({ servingAll, waiting } = callInto(servingAll, waiting, action.next, true, action.operatorId, at));
     } else if (action.kind === 'call') {
-      ({ serving, waiting } = callInto(serving, waiting, action.ticket, at));
+      ({ servingAll, waiting } = callInto(servingAll, waiting, action.ticket, action.viaNext, action.operatorId, at));
+    } else if (action.kind === 'cancel') {
+      waiting = waiting.filter(w => w.id !== action.ticket.id);
     }
   }
-  return serving === queue.serving && waiting === queue.waiting ? queue : { ...queue, serving, waiting };
+  if (servingAll === initial && waiting === queue.waiting && queue.serving_all) return queue;
+  return { ...queue, serving: servingAll.at(-1) ?? null, serving_all: servingAll, waiting };
 }
 
 /** Lokalizacja z nałożonym wstrzymaniem / wznowieniem zapisów. */

@@ -3,6 +3,7 @@ import json
 import uuid
 import secrets
 import string
+import math
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -10,7 +11,7 @@ from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_
 from sqlalchemy.exc import IntegrityError
 import redis.asyncio as aioredis
 import models
@@ -23,7 +24,7 @@ from password_policy import validate_password
 from ws import manager as ws_manager, redis_pubsub_listener, publish_event, REDIS_CHANNEL
 
 from datetime import date, datetime, timezone
-from clock import local_today
+from clock import local_today, local_day_start_utc
 from typing import Optional
 from schemas.api_schemas import (
     KioskStatusResponse, SignupCodeResponse, JoinQueueRequest, JoinQueueResponse, PatientCancelRequest,
@@ -32,7 +33,7 @@ from schemas.api_schemas import (
     LoginRequest, TokenResponse, MeResponse, ChangePasswordRequest, PasswordChangedResponse,
     UserCreate, UserUpdate, UserResponse,
     LocationCreate, LocationUpdate, LocationResponse, TabletInLocation,
-    TicketResponse, QueueResponse, TicketHistoryEntry,
+    TicketResponse, QueueResponse, TicketHistoryEntry, ServingTicket,
     UserPreferences, UserPreferencesUpdate, CloseReason,
 )
 from pydantic import ValidationError
@@ -40,6 +41,65 @@ from pydantic import ValidationError
 logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+
+def _today_ticket_filter():
+    """
+    Warunek „bilet z dzisiejszego dnia placówki” (P3). Kolejka, liczniki, pozycje i
+    szacowany czas biorą pod uwagę tylko dzisiejsze bilety — numeracja zaczyna się
+    każdego dnia od nowa, więc wczorajszy A05 nie może stać obok dzisiejszego A05.
+    """
+    return models.Ticket.service_date == local_today()
+
+
+def _stale_ticket_filter():
+    """Bilety otwarte (WAITING/SERVING) z poprzednich dni — do automatycznego zamknięcia."""
+    return and_(
+        models.Ticket.status.in_(("WAITING", "SERVING")),
+        or_(
+            models.Ticket.service_date < local_today(),
+            # stare bilety bez service_date (sprzed migracji) — po dacie dołączenia
+            and_(models.Ticket.service_date.is_(None), models.Ticket.joined_at < local_day_start_utc()),
+        ),
+    )
+
+
+def close_stale_tickets(db: Session) -> list[models.Ticket]:
+    """
+    Zamyka bilety WAITING i SERVING z poprzednich dni (P3): status CANCELLED,
+    powód STAFF_CANCELLED. served_at zostaje puste — bilet nie został obsłużony,
+    a historia zmiany (served_at >= dzisiejsza północ) nie pokaże wczorajszych resztek.
+    """
+    stale = db.query(models.Ticket).filter(_stale_ticket_filter()).all()
+    for t in stale:
+        t.status = "CANCELLED"
+        t.close_reason = "STAFF_CANCELLED"
+    if stale:
+        db.commit()
+        logger.info("Zamknięto %d bilet(ów) z poprzednich dni.", len(stale))
+    return stale
+
+
+async def _sweep_stale_tickets(redis_client) -> None:
+    """Zamyka stare bilety i powiadamia otwarte panele. Błąd nie zatrzymuje reszty sweepera."""
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        for t in close_stale_tickets(db):
+            # Tylko panel (location:{id}). Do guest:{kod} nic nie wysyłamy — ten sam kod
+            # może mieć dziś inny, aktywny bilet, który zostałby błędnie zamknięty w aplikacji.
+            await publish_event(
+                redis_client,
+                topic=f"location:{t.location_id}",
+                event_type="ticket.updated",
+                payload={"ticket": _ticket_to_response(t).model_dump()},
+            )
+    except Exception as e:
+        db.rollback()
+        logger.error("Błąd przy zamykaniu biletów z poprzednich dni: %s", e)
+    finally:
+        db.close()
 
 
 async def heartbeat_sweeper(app: FastAPI):
@@ -54,6 +114,7 @@ async def heartbeat_sweeper(app: FastAPI):
     while True:
         try:
             await asyncio.sleep(15)
+            await _sweep_stale_tickets(app.state.redis)
             db = SessionLocal()
             try:
                 now = datetime.now(timezone.utc)
@@ -101,6 +162,8 @@ async def lifespan(app: FastAPI):
         heartbeat_sweeper(app)
     )
     logger.info("Redis połączony: %s", REDIS_URL)
+    # Sweeper najpierw śpi 15 s — bilety z poprzednich dni zamykamy od razu przy starcie (P3).
+    await _sweep_stale_tickets(app.state.redis)
     yield
     app.state.pubsub_task.cancel()
     app.state.heartbeat_task.cancel()
@@ -250,7 +313,7 @@ def _tablet_public(tablet: models.Tablet) -> dict:
 def _current_serving_ticket_code(location_id: int, db: Session) -> str | None:
     ticket = (
         db.query(models.Ticket)
-        .filter(models.Ticket.location_id == location_id, models.Ticket.status == "SERVING")
+        .filter(models.Ticket.location_id == location_id, models.Ticket.status == "SERVING", _today_ticket_filter())
         .order_by(models.Ticket.called_at.desc())
         .first()
     )
@@ -953,6 +1016,47 @@ def _ticket_to_response(ticket: models.Ticket) -> TicketResponse:
     )
 
 
+# Szacowany czas oczekiwania (P13): średni czas obsługi z ostatnich zakończonych biletów lokalizacji.
+DEFAULT_SERVICE_MINUTES = 3.0
+SERVICE_SAMPLE_SIZE = 20
+
+
+def average_service_minutes(location_id: int, db: Session) -> float:
+    """
+    Średni czas obsługi (served_at − called_at) z ostatnich SERVICE_SAMPLE_SIZE dzisiejszych
+    biletów COMPLETED w lokalizacji. Bez danych (np. rano) — DEFAULT_SERVICE_MINUTES.
+    Liczone w Pythonie, a nie przez extract(epoch) w SQL, żeby nie wiązać się z Postgresem.
+    """
+    rows = (
+        db.query(models.Ticket.called_at, models.Ticket.served_at)
+        .filter(
+            models.Ticket.location_id == location_id,
+            models.Ticket.status == "COMPLETED",
+            models.Ticket.called_at.isnot(None),
+            models.Ticket.served_at.isnot(None),
+            _today_ticket_filter(),
+        )
+        .order_by(models.Ticket.served_at.desc())
+        .limit(SERVICE_SAMPLE_SIZE)
+        .all()
+    )
+    durations = [
+        (served - called).total_seconds() / 60
+        for called, served in rows
+        if served >= called
+    ]
+    if not durations:
+        return DEFAULT_SERVICE_MINUTES
+    return sum(durations) / len(durations)
+
+
+def estimate_wait_minutes(queue_position: int, avg_service_minutes: float) -> int:
+    """Osoby przed tobą × średni czas obsługi, w górę do pełnej minuty (0 = jesteś następny)."""
+    if queue_position <= 0:
+        return 0
+    return math.ceil(queue_position * avg_service_minutes)
+
+
 def _get_ticket_or_404(ticket_id: str, db: Session) -> models.Ticket:
     try:
         uid = uuid.UUID(ticket_id)
@@ -1051,6 +1155,7 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
     queue_position = db.query(models.Ticket).filter(
         models.Ticket.location_id == location_id,
         models.Ticket.status == "WAITING",
+        _today_ticket_filter(),
         models.Ticket.joined_at < now,
     ).count()
 
@@ -1067,7 +1172,7 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
     # Ten sam bilet zmienia „łącznie w kolejce” u pozostałych czekających — wyślij im odświeżenie.
     await _broadcast_queue_updates(request.app.state.redis, location_id, db)
 
-    estimated_wait_time_minutes = queue_position * 3
+    estimated_wait_time_minutes = estimate_wait_minutes(queue_position, average_service_minutes(location_id, db))
 
     return JoinQueueResponse(
         ticket_id=str(ticket.id),
@@ -1113,12 +1218,16 @@ async def get_ticket_status(ticket_code: str, db: Session = Depends(get_db)):
         queue_position = db.query(models.Ticket).filter(
             models.Ticket.location_id == ticket.location_id,
             models.Ticket.status == "WAITING",
+            _today_ticket_filter(),
             models.Ticket.joined_at < ticket.joined_at,
         ).count()
-        estimated_wait_time_minutes = queue_position * 3
+        estimated_wait_time_minutes = estimate_wait_minutes(
+            queue_position, average_service_minutes(ticket.location_id, db)
+        )
         total_in_queue = db.query(models.Ticket).filter(
             models.Ticket.location_id == ticket.location_id,
             models.Ticket.status == "WAITING",
+            _today_ticket_filter(),
         ).count()
 
     return TicketStatusResponse(
@@ -1196,19 +1305,21 @@ async def _broadcast_queue_updates(redis_client, location_id: int, db: Session) 
         .filter(
             models.Ticket.location_id == location_id,
             models.Ticket.status == "WAITING",
+            _today_ticket_filter(),
         )
         .order_by(models.Ticket.joined_at.asc())
         .all()
     )
 
     total_in_queue = len(waiting_tickets)
+    avg_service = average_service_minutes(location_id, db) if waiting_tickets else DEFAULT_SERVICE_MINUTES
 
     for idx, t in enumerate(waiting_tickets):
         update_msg = {
             "topic": f"guest:{t.ticket_code}",
             "event": "QUEUE_UPDATE",
             "queue_position": idx,
-            "estimated_wait_time_minutes": idx * 3,
+            "estimated_wait_time_minutes": estimate_wait_minutes(idx, avg_service),
             "total_in_queue": total_in_queue,
         }
         await redis_client.publish(REDIS_CHANNEL, json.dumps(update_msg, default=str))
@@ -1903,9 +2014,10 @@ async def get_location_queue(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Zwraca stan kolejki dla danej lokalizacji:
+    Zwraca stan kolejki dla danej lokalizacji (tylko bilety z dzisiejszego dnia placówki):
     - waiting: lista biletów WAITING posortowana po joined_at (najstarszy = pierwszy)
-    - serving: aktualnie obsługiwany bilet (SERVING) lub null
+    - serving_all: wszystkie wezwane bilety (SERVING), po jednym na operatora, z jego imieniem
+    - serving: ostatnio wezwany bilet lub null (dla zgodności ze starszymi klientami)
     """
     ensure_location_access(current_user, location_id)
     _get_location_or_404(location_id, db)
@@ -1915,25 +2027,34 @@ async def get_location_queue(
         .filter(
             models.Ticket.location_id == location_id,
             models.Ticket.status == "WAITING",
+            _today_ticket_filter(),
         )
         .order_by(models.Ticket.joined_at.asc())
         .all()
     )
 
-    serving = (
+    serving_all = (
         db.query(models.Ticket)
         .filter(
             models.Ticket.location_id == location_id,
             models.Ticket.status == "SERVING",
+            _today_ticket_filter(),
         )
-        .order_by(models.Ticket.called_at.desc())
-        .first()
+        .order_by(models.Ticket.called_at.asc())
+        .all()
     )
 
     return QueueResponse(
         location_id=location_id,
         waiting=[_ticket_to_response(t) for t in waiting],
-        serving=_ticket_to_response(serving) if serving else None,
+        serving=_ticket_to_response(serving_all[-1]) if serving_all else None,
+        serving_all=[
+            ServingTicket(
+                **_ticket_to_response(t).model_dump(),
+                served_by_name=t.served_by_user.full_name if t.served_by_user else None,
+            )
+            for t in serving_all
+        ],
     )
 
 
@@ -1986,32 +2107,55 @@ async def get_ticket_history(
     ]
 
 
-@app.post(
-    "/api/v1/admin/tickets/{ticket_id}/call",
-    response_model=TicketResponse,
-    tags=["Admin — Queue"],
-)
-async def call_ticket(
-    ticket_id: str,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
+def _lock_free_operator(user: models.User, db: Session) -> None:
     """
-    Wzywa pacjenta do okienka.
-    status → SERVING, called_at = now(), served_by_user_id = zalogowany operator.
-    Wysyła event YOUR_TURN do wezwanego pacjenta i QUEUE_UPDATE do pozostałych.
+    Zasada „najwyżej jeden wezwany bilet na operatora” (P2). Blokada wiersza konta
+    (SELECT … FOR UPDATE) szereguje wezwania tego samego operatora — np. dwie karty
+    przeglądarki albo podwójne kliknięcie — więc obie nie przejdą sprawdzenia naraz.
     """
-    ticket = _get_ticket_or_404(ticket_id, db)
-    ensure_location_access(current_user, ticket.location_id)
-    if ticket.status != "WAITING":
+    db.query(models.User).filter(models.User.id == user.id).with_for_update().first()
+    busy = (
+        db.query(models.Ticket)
+        .filter(
+            models.Ticket.served_by_user_id == user.id,
+            models.Ticket.status == "SERVING",
+            _today_ticket_filter(),
+        )
+        .first()
+    )
+    if busy:
         raise HTTPException(
             status_code=409,
-            detail=f"Nie można wezwać biletu o statusie '{ticket.status}' (wymagany: WAITING)",
+            detail=(
+                f"Obsługujesz już bilet {busy.ticket_code} ({busy.location.name}). "
+                "Zakończ go, zanim wezwiesz kolejną osobę."
+            ),
         )
+
+
+def _ensure_own_serving(ticket: models.Ticket, user: models.User) -> None:
+    """
+    Wezwany bilet kończy (obsłużono / nie zgłosił się) tylko operator, który go wezwał,
+    albo administrator. Inaczej spóźnione kliknięcie w panelu — oparte na przewidywaniu,
+    kogo wezwie „wezwij następnego” — mogłoby zamknąć pacjenta innego stanowiska.
+    """
+    if (
+        ticket.status == "SERVING"
+        and ticket.served_by_user_id is not None
+        and ticket.served_by_user_id != user.id
+        and user.role != ROLE_ADMIN
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Bilet {ticket.ticket_code} obsługuje inne stanowisko.",
+        )
+
+
+async def _call(ticket: models.Ticket, user: models.User, request: Request, db: Session) -> TicketResponse:
+    """Wspólna część wezwania: SERVING, called_at, operator, zdarzenia dla panelu i pacjentów."""
     ticket.status = "SERVING"
     ticket.called_at = datetime.now(timezone.utc)
-    ticket.served_by_user_id = current_user.id
+    ticket.served_by_user_id = user.id
     db.commit()
     db.refresh(ticket)
     response = _ticket_to_response(ticket)
@@ -2037,6 +2181,81 @@ async def call_ticket(
 
 
 @app.post(
+    "/api/v1/admin/tickets/{ticket_id}/call",
+    response_model=TicketResponse,
+    tags=["Admin — Queue"],
+)
+async def call_ticket(
+    ticket_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Wzywa konkretnego pacjenta do okienka (także poza kolejnością).
+    status → SERVING, called_at = now(), served_by_user_id = zalogowany operator.
+    Wysyła event YOUR_TURN do wezwanego pacjenta i QUEUE_UPDATE do pozostałych.
+
+    409, gdy operator ma już wezwany bilet albo gdy ten bilet wezwał w międzyczasie
+    ktoś inny (wiersz biletu jest blokowany, więc dwa wezwania nie przejdą naraz).
+    """
+    ticket = _get_ticket_or_404(ticket_id, db)
+    ensure_location_access(current_user, ticket.location_id)
+    _lock_free_operator(current_user, db)
+    db.refresh(ticket, with_for_update=True)
+    if ticket.status == "SERVING":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Bilet {ticket.ticket_code} wezwał już inny operator.",
+        )
+    if ticket.status != "WAITING":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Nie można wezwać biletu o statusie '{ticket.status}' (wymagany: WAITING)",
+        )
+    if ticket.service_date != local_today():
+        raise HTTPException(status_code=409, detail="Bilet pochodzi z poprzedniego dnia.")
+    return await _call(ticket, current_user, request, db)
+
+
+@app.post(
+    "/api/v1/admin/locations/{location_id}/call-next",
+    response_model=TicketResponse,
+    tags=["Admin — Queue"],
+)
+async def call_next_ticket(
+    location_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Wzywa następną osobę z kolejki — wybór po stronie serwera (P9).
+    Najdawniej czekający dzisiejszy bilet WAITING, pobrany przez
+    SELECT … FOR UPDATE SKIP LOCKED: dwóch operatorów klikających naraz dostaje
+    dwa różne bilety zamiast błędu 409. 404, gdy nikt nie czeka.
+    """
+    ensure_location_access(current_user, location_id)
+    _get_location_or_404(location_id, db)
+    _lock_free_operator(current_user, db)
+    ticket = (
+        db.query(models.Ticket)
+        .filter(
+            models.Ticket.location_id == location_id,
+            models.Ticket.status == "WAITING",
+            _today_ticket_filter(),
+        )
+        .order_by(models.Ticket.joined_at.asc())
+        .limit(1)
+        .with_for_update(skip_locked=True)
+        .first()
+    )
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Nikt nie czeka w tej kolejce.")
+    return await _call(ticket, current_user, request, db)
+
+
+@app.post(
     "/api/v1/admin/tickets/{ticket_id}/complete",
     response_model=TicketResponse,
     tags=["Admin — Queue"],
@@ -2059,6 +2278,7 @@ async def complete_ticket(
             status_code=409,
             detail=f"Nie można zakończyć biletu o statusie '{ticket.status}' (wymagany: SERVING)",
         )
+    _ensure_own_serving(ticket, current_user)
     ticket.status = "COMPLETED"
     ticket.served_at = datetime.now(timezone.utc)
     db.commit()
@@ -2105,9 +2325,13 @@ async def cancel_ticket(
             status_code=409,
             detail=f"Bilet jest już w stanie końcowym: '{ticket.status}'",
         )
+    _ensure_own_serving(ticket, current_user)
     if reason == "PATIENT_CANCELLED":
         raise HTTPException(status_code=422, detail="PATIENT_CANCELLED ustawia tylko pacjent (POST /queue/cancel)")
     ticket.close_reason = reason or ("NO_SHOW" if ticket.status == "SERVING" else "STAFF_CANCELLED")
+    if ticket.served_by_user_id is None:
+        # anulowanie czekającego biletu (P5) — zapisz, kto je wykonał, tak jak przy obsłudze
+        ticket.served_by_user_id = current_user.id
     ticket.status = "CANCELLED"
     ticket.served_at = datetime.now(timezone.utc)
     db.commit()

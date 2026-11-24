@@ -95,10 +95,18 @@ export interface UserPreferences {
   single_key_shortcuts: boolean;
 }
 
+/** Wezwany bilet z imieniem operatora, który go wezwał. */
+export interface ServingTicket extends TicketResponse {
+  served_by_name: string | null;
+}
+
 export interface QueueResponse {
   location_id: number;
   waiting: TicketResponse[];
+  /** Ostatnio wezwany bilet (zgodność wstecz). Panel korzysta z `serving_all`. */
   serving: TicketResponse | null;
+  /** Wszystkie wezwane bilety, po jednym na operatora, od najdawniej wezwanego. */
+  serving_all: ServingTicket[];
 }
 
 export interface RefreshHandle {
