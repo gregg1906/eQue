@@ -180,6 +180,7 @@ const UNDO_OPTIONS: { value: UndoSeconds; label: string }[] = [
   { value: 6, label: '6 s' },
   { value: 10, label: '10 s' },
   { value: 20, label: '20 s' },
+  { value: 60, label: '60 s' },
 ];
 
 function QueueWorkCard() {

@@ -81,7 +81,7 @@ export interface TicketHistoryEntry extends TicketResponse {
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type TextSize = 'normal' | 'large' | 'xlarge';
-export type UndoSeconds = 6 | 10 | 20;
+export type UndoSeconds = 6 | 10 | 20 | 60;
 
 /** Ustawienia panelu zapisane na koncie (GET/PUT /auth/me/preferences). */
 export interface UserPreferences {

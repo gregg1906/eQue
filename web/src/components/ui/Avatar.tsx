@@ -3,7 +3,7 @@ function getInitials(name: string) {
 }
 
 /* jeden spokojny kolor dla wszystkich — losowa tęcza inicjałów niczego nie mówi, a kolor zostaje dla statusów */
-const NEUTRAL = { bg: 'var(--border-subtle)', fg: 'var(--text-strong)' };
+const NEUTRAL = { bg: 'var(--surface-sunken)', fg: 'var(--text-strong)' };
 
 /** Inicjały w kółku z kropką obecności. `online: null` — bez kropki. */
 export default function Avatar({ name, online = null, active = true, size = 32, tone = 'brand' }: {
@@ -15,21 +15,21 @@ export default function Avatar({ name, online = null, active = true, size = 32, 
   tone?: 'brand' | 'auto';
 }) {
   const colors = !active
-    ? { bg: 'var(--surface-sunken)', fg: 'var(--text-muted)' }
+    ? { bg: 'var(--surface-sunken)', fg: 'var(--text-muted-strong)' }
     : tone === 'brand'
       ? { bg: 'var(--brand-subtle)', fg: 'var(--text-brand)' }
       : NEUTRAL;
   const dot = Math.max(10, Math.round(size * 0.3));
 
   return (
-    <span className="avatar" style={{ width: size, height: size, background: colors.bg, color: colors.fg, fontSize: size >= 40 ? 15 : 12.5 }} aria-hidden="true">
+    <span className="avatar" style={{ width: size, height: size, background: colors.bg, color: colors.fg, boxShadow: 'inset 0 0 0 1px var(--border-subtle)', fontSize: size >= 40 ? 15 : 12.5 }} aria-hidden="true">
       {getInitials(name) || '?'}
       {online !== null && (
         <span
           className="avatar-dot"
           style={{
             width: dot, height: dot,
-            background: active && online ? 'var(--queue-served)' : 'var(--surface-card)',
+            background: active && online ? 'var(--queue-served-dot)' : 'var(--surface-card)',
             boxShadow: active && online ? undefined : 'inset 0 0 0 2px var(--border-default)',
           }}
         />

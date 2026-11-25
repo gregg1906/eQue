@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
+import { FOCUSABLE, trapTab } from '../../lib/useFocusTrap';
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const FIRST_FIELD = '[data-autofocus], input:not([disabled]):not([type="checkbox"]), textarea:not([disabled]), .select-trigger:not([disabled])';
 
 /**
@@ -19,7 +19,7 @@ export default function Drawer({ open, onClose, title, leading, children, footer
   footer?: React.ReactNode;
 }) {
   const titleId = useId();
-  const panelRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -43,19 +43,13 @@ export default function Drawer({ open, onClose, title, leading, children, footer
       onClose();
       return;
     }
-    if (e.key !== 'Tab' || !panelRef.current) return;
-    const items = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el => el.offsetParent !== null);
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    trapTab(e, panelRef.current);
   };
 
   return createPortal(
     <>
       <div className={open ? 'drawer-scrim is-open' : 'drawer-scrim'} onClick={onClose} aria-hidden="true" />
-      <aside
+      <div
         ref={panelRef}
         className={open ? 'drawer is-open' : 'drawer'}
         role="dialog"
@@ -73,7 +67,7 @@ export default function Drawer({ open, onClose, title, leading, children, footer
         </div>
         <div className="drawer-body">{children}</div>
         {footer && <div className="drawer-foot">{footer}</div>}
-      </aside>
+      </div>
     </>,
     document.body,
   );

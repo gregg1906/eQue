@@ -8,7 +8,7 @@ import { dismissToast, showToast } from '../components/ui/useToast';
 /*
   „Cofnij” bez endpointu cofania (backend ma tylko call / call-next / complete / cancel / pause-queue / resume-queue):
   1. akcja od razu zmienia UI (nakładka na stan z serwera) i pokazuje powiadomienie z „Cofnij”
-     na 6, 10 albo 20 s — długość okna wybiera użytkownik w Ustawieniach (WCAG 2.2.1),
+     na 6, 10, 20 albo 60 s — długość okna wybiera użytkownik w Ustawieniach (WCAG 2.2.1),
   2. żądanie idzie dopiero po upływie okna albo od razu, gdy operator wykona kolejną akcję (najpierw oczekująca),
   3. „Cofnij” = clearTimeout + zdjęcie nakładki,
   4. pagehide / visibilitychange: hidden / odmontowanie ekranu → wysyłka od razu (fetch z keepalive),

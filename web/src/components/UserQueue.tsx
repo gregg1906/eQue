@@ -13,6 +13,7 @@ import { onQueueCommand } from '../lib/commands';
 import { useQueueActions, applyQueueActions, applyLocationActions, type Entry, type QueueAction } from '../lib/useQueueActions';
 import Button from './ui/Button';
 import Segmented from './ui/Segmented';
+import { segmentedTabId } from './ui/segmentedIds';
 import Switch from './ui/Switch';
 import TicketCode from './ui/TicketCode';
 import StatusPill from './ui/StatusPill';
@@ -378,6 +379,7 @@ const UserQueue = forwardRef<RefreshHandle, {
             <div className="qlist-head">
               <Segmented
                 label="Lista"
+                panelId="qlist-panel"
                 value={list}
                 onChange={setList}
                 options={[
@@ -388,6 +390,7 @@ const UserQueue = forwardRef<RefreshHandle, {
               {list === 'wait' && <p className="qlist-caption">Według godziny dołączenia · bursztynowy czas = ponad {LONG_WAIT_MIN} min</p>}
             </div>
 
+            <div role="tabpanel" id="qlist-panel" aria-labelledby={segmentedTabId('qlist-panel', list)}>
             {list === 'wait' ? (
               !queue || queue.waiting.length === 0 ? (
                 <p className="qlist-empty">
@@ -461,6 +464,7 @@ const UserQueue = forwardRef<RefreshHandle, {
                 })}
               </ol>
             )}
+            </div>
           </div>
 
           <aside className="side-stack" aria-label="Zmiana operatora">

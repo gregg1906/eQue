@@ -3,6 +3,7 @@ import Icon, { type IconName } from './Icon';
 import QueueLetter from './QueueLetter';
 import LiveIndicator from './LiveIndicator';
 import { useSessionRemaining } from '../../lib/session';
+import { useFocusTrap } from '../../lib/useFocusTrap';
 
 export interface NavItem {
   key: string;
@@ -45,6 +46,7 @@ function useMobileNavFocus(open: boolean, onClose: () => void) {
     };
   }, [open]);
 
+  useFocusTrap(asideRef, open);
   return asideRef;
 }
 

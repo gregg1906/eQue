@@ -26,6 +26,8 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
     e.preventDefault();
     if (!username.trim() || !password) {
       setError('Wpisz login i hasło.');
+      // fokus na pierwszym pustym polu
+      requestAnimationFrame(() => document.getElementById(username.trim() ? 'login-password' : 'login-username')?.focus());
       return;
     }
     setError('');
@@ -86,6 +88,7 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
 
           <div className="login-fields">
             <FloatingInput
+              id="login-username"
               label="Login"
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -95,6 +98,7 @@ export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormPr
               autoFocus
             />
             <FloatingInput
+              id="login-password"
               label="Hasło"
               type="password"
               value={password}

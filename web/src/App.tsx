@@ -24,8 +24,9 @@ import { sortByName } from './lib/sort';
 import { SYSTEM_DARK, SYSTEM_MORE_CONTRAST, useMediaQuery, type ThemePreference } from './lib/theme';
 import { applyPreferencesToDocument, loadPreferences, resetPreferences, updatePreferences, usePreferences } from './lib/preferences';
 import { useNewTicketSound } from './lib/sound';
-import { showToast } from './components/ui/useToast';
+import { showToast, dismissToast } from './components/ui/useToast';
 import { useQueueSummaries } from './lib/useQueueSummaries';
+import { pathForTab, tabFromPath } from './lib/routes';
 import type { LocationResponse, MeResponse, RefreshHandle } from './lib/apiTypes';
 
 type Role = 'admin' | 'user' | null;
@@ -75,6 +76,15 @@ function queueIdFromTab(tab: string): number | null {
 }
 const NO_LOCATIONS: number[] = [];
 
+/** Kolejka, której już nie ma wśród aktywnych lokalizacji operatora (np. dezaktywowana), → Pulpit. */
+function resolveTab(selected: string, role: Role, queues: { id: number }[] | undefined): string {
+  const id = queueIdFromTab(selected);
+  const gone = id !== null && (role !== 'user' || (queues !== undefined && !queues.some(q => q.id === id)));
+  return gone ? homeTab() : selected;
+}
+
+const allowedTabs = (role: Role) => (role === 'admin' ? ADMIN_TABS : USER_TABS);
+
 const SESSION_EXPIRED = 'Twoja sesja wygasła. Zaloguj się ponownie, żeby kontynuować pracę.';
 
 
@@ -91,6 +101,8 @@ export default function App() {
   const [paletteLocations, setPaletteLocations] = useState<LocationResponse[]>([]);
   const [navOpen, setNavOpen] = useState(false);
   const contentRef = useRef<RefreshHandle | null>(null);
+  /** Po przejściu zrobionym przez użytkownika (menu, paleta, wstecz) fokus trafia na nagłówek ekranu. */
+  const focusTitleRef = useRef(false);
 
   // Ustawienia z konta (motyw, rozmiar tekstu, kontrast, ruch…) — patrz lib/preferences.ts
   const prefs = usePreferences();
@@ -119,7 +131,7 @@ export default function App() {
         .then(me => {
           const s = meToSession(me);
           setSession(s);
-          setActiveTab(homeTab());
+          setActiveTab(tabFromPath(window.location.pathname, allowedTabs(s.role)));
         })
         .catch(err => {
           clearToken();
@@ -136,7 +148,10 @@ export default function App() {
     // Wylogowanie z serwera (Z3): unieważnia token, a nie tylko usuwa go z przeglądarki.
     // Przy wygasłej sesji (notice) token i tak jest już odrzucony, więc wołamy tylko przy świadomym wylogowaniu.
     if (notice === null && getToken()) void api.post('/auth/logout').catch(() => {});
+    // świadome wylogowanie zaczyna od „/”; po wygaśnięciu sesji adres zostaje, więc po zalogowaniu wracasz na ten sam ekran
+    if (notice === null) window.history.replaceState(null, '', '/');
     setSession(null);
+    dismissToast(); // błędy nie znikają same, więc stary nie może zostać na ekranie logowania
     setPaletteOpen(false);
     setNavOpen(false);
     setAddOpen(false);
@@ -197,19 +212,29 @@ export default function App() {
   const closeAdd = useCallback(() => setAddOpen(false), []);
   const openAdd = useCallback(() => setAddOpen(true), []);
 
-  const switchTab = useCallback((tab: string) => {
+  /** Zmienia ekran i dopisuje wpis do historii przeglądarki (przycisk „wstecz” działa jak w zwykłej stronie). */
+  const go = useCallback((tab: string) => {
+    const path = pathForTab(tab);
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+      focusTitleRef.current = true;
+    }
     setActiveTab(tab);
+  }, []);
+
+  const switchTab = useCallback((tab: string) => {
+    go(tab);
     setAddOpen(false);
     setIntent(null);
     setNavOpen(false);
-  }, []);
+  }, [go]);
 
   const navigate = useCallback((tab: string, opts?: NavigateOptions) => {
-    setActiveTab(tab);
+    go(tab);
     setNavOpen(false);
     setAddOpen(!!opts?.add);
     setIntent(opts?.editId !== undefined ? { tab, id: opts.editId } : null);
-  }, []);
+  }, [go]);
 
   const defaultQueueId = prefs.default_location_id;
   const openQueue = (locationId?: number) => {
@@ -223,10 +248,51 @@ export default function App() {
     const s = meToSession(me);
     setLoginNotice(null);
     setSession(s);
-    setActiveTab(homeTab());
+    setActiveTab(tabFromPath(window.location.pathname, allowedTabs(s.role)));
   };
 
   const handleLogout = () => endSession(null);
+
+  // Przycisk „wstecz” i „dalej”
+  useEffect(() => {
+    if (!session) return;
+    const onPop = () => {
+      focusTitleRef.current = true;
+      setActiveTab(tabFromPath(window.location.pathname, allowedTabs(session.role)));
+      setAddOpen(false);
+      setIntent(null);
+      setNavOpen(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [session]);
+
+  // Adres, tytuł karty i fokus zawsze zgodne z ekranem, który naprawdę widać (po ewentualnym powrocie na Pulpit)
+  const role = session?.role ?? null;
+  const resolvedTab = role ? resolveTab(selectedTab, role, queues) : null;
+  const resolvedQueue = resolvedTab ? queues?.find(q => q.id === queueIdFromTab(resolvedTab)) : undefined;
+  const waitingNow = resolvedQueue?.waiting ?? 0;
+  const queueName = resolvedQueue?.name;
+
+  useEffect(() => {
+    if (resolvedTab && window.location.pathname !== pathForTab(resolvedTab)) {
+      window.history.replaceState(null, '', pathForTab(resolvedTab));
+    }
+  }, [resolvedTab]);
+
+  useEffect(() => {
+    if (checkingSession) return;
+    if (!resolvedTab) { document.title = 'Logowanie · eQue'; return; }
+    const count = waitingNow > 0 ? `(${waitingNow}) ` : '';
+    const name = queueIdFromTab(resolvedTab) !== null ? `Kolejka: ${queueName ?? ''}`.replace(/: $/, '') : TAB_META[resolvedTab]?.title;
+    document.title = `${count}${name ?? 'Panel'} · eQue`;
+  }, [checkingSession, resolvedTab, waitingNow, queueName]);
+
+  useEffect(() => {
+    if (!focusTitleRef.current || !resolvedTab) return;
+    focusTitleRef.current = false;
+    document.getElementById('app-title')?.focus();
+  }, [resolvedTab]);
 
   const hosts = <><DialogHost /><ToastHost /></>;
 
@@ -238,11 +304,9 @@ export default function App() {
     return <><LoginForm onLoginSuccess={handleLoginSuccess} notice={loginNotice} />{hosts}</>;
   }
 
-  const { id: currentUserId, role, fullName: userName, locationIds } = session;
-  // Kolejka, której już nie ma wśród aktywnych lokalizacji operatora (np. dezaktywowana), → Pulpit
-  const openQueueId = queueIdFromTab(selectedTab);
-  const queueGone = openQueueId !== null && (role !== 'user' || (queues !== undefined && !queues.some(q => q.id === openQueueId)));
-  const activeTab = queueGone ? homeTab() : selectedTab;
+  const { id: currentUserId, fullName: userName, locationIds } = session;
+  const activeTab = resolveTab(selectedTab, session.role, queues);
+  const openQueueId = queueIdFromTab(activeTab);
   const activeQueue = openQueueId !== null ? queues?.find(q => q.id === openQueueId) : undefined;
   const meta = TAB_META[activeTab] ?? { title: activeQueue?.name ?? 'Kolejka', action: null };
   const intentId = (tab: string) => (intent?.tab === tab ? intent.id : null);
@@ -292,6 +356,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#tresc" onClick={e => { e.preventDefault(); document.getElementById('tresc')?.focus(); }}>Przejdź do treści</a>
       {role === 'admin' ? (
         <Sidebar
           activeTab={activeTab}
@@ -327,13 +392,13 @@ export default function App() {
           >
             <Icon name="menu" />
           </button>
-          <h1 className="app-title">{meta.title}</h1>
+          <h1 className="app-title" id="app-title" tabIndex={-1}>{meta.title}</h1>
           <div className="app-head-actions">
             <button
               type="button"
               className="cmdk-btn"
               onClick={() => setPaletteOpen(true)}
-              aria-label="Szukaj i przejdź"
+              aria-label="Szukaj ekranów i akcji"
               aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'}
             >
               <Icon name="search" />
@@ -343,7 +408,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="app-body">
+        <div className="app-body" id="tresc" tabIndex={-1}>
           <div className="app-body-in">
             {content ?? <div className="card"><EmptyState title="Pusta zakładka" text="Wybierz ekran z menu po lewej." /></div>}
           </div>

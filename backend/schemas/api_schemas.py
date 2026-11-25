@@ -269,7 +269,7 @@ class UserPreferences(BaseModel):
     high_contrast: bool = False
     reduce_motion: bool = False
     # WCAG 2.2.1 — użytkownik może wydłużyć czas na „Cofnij”
-    undo_seconds: Literal[6, 10, 20] = 6
+    undo_seconds: Literal[6, 10, 20, 60] = 6
     sound_on_new_ticket: bool = False
     default_location_id: Optional[int] = None
     # WCAG 2.1.4 — skróty jednoklawiszowe muszą dać się wyłączyć
@@ -282,7 +282,7 @@ class UserPreferencesUpdate(BaseModel):
     text_size: Optional[Literal["normal", "large", "xlarge"]] = None
     high_contrast: Optional[bool] = None
     reduce_motion: Optional[bool] = None
-    undo_seconds: Optional[Literal[6, 10, 20]] = None
+    undo_seconds: Optional[Literal[6, 10, 20, 60]] = None
     sound_on_new_ticket: Optional[bool] = None
     default_location_id: Optional[int] = None
     single_key_shortcuts: Optional[bool] = None

@@ -279,12 +279,10 @@ const AdminHome = forwardRef<RefreshHandle, { onNavigate: (tab: string, opts?: N
                     <tr
                       key={loc.id}
                       className={loc.is_active ? 'is-clickable' : 'is-clickable is-off'}
-                      tabIndex={0}
                       onClick={open}
-                      onKeyDown={e => { if (e.key === 'Enter') open(); }}
                       title="Otwórz ustawienia lokalizacji"
                     >
-                      <td><div className="cell-main"><QueueLetter letter={loc.queue_code} off={!loc.is_active} /><b>{loc.name}</b></div></td>
+                      <td><button type="button" className="cell-main row-link"><QueueLetter letter={loc.queue_code} off={!loc.is_active} /><b>{loc.name}</b></button></td>
                       <td>{q?.serving_all.length ? <span className="serving-codes">{q.serving_all.map(t => <TicketCode key={t.id} code={t.ticket_code} state="called" />)}</span> : <span className="muted">Nikt</span>}</td>
                       <td className="num">{q ? q.waiting.length : '–'}</td>
                       <td className="num">

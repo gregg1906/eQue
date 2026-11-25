@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { focusFirstInvalid, confirmDiscard } from '../lib/formGuards';
 import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, validatePassword } from '../lib/passwordPolicy';
@@ -124,7 +125,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
       if (policyError) errors.password = policyError;
     }
     setAddErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) { focusFirstInvalid(); return; }
 
     setAdding(true);
     try {
@@ -172,7 +173,7 @@ const AdminUsers = forwardRef<RefreshHandle, {
       if (policyError) errors.password = policyError;
     }
     setEditErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) { focusFirstInvalid(); return; }
 
     // Status konta jest częścią formularza: zmiana wchodzi w życie dopiero po „Zapisz”.
     // Porównujemy z rekordem z serwera, więc ponowny zapis po częściowym błędzie nie powtarza udanego kroku.
@@ -274,6 +275,17 @@ const AdminUsers = forwardRef<RefreshHandle, {
     status: u => userStatus(u).label,
   }, byName);
   const editedUser = editUser ? users.find(u => u.id === editUser.id) : undefined;
+
+  // niezapisane zmiany: Esc, kliknięcie w tło, „X” i „Anuluj” pytają, zanim je wyrzucą
+  const addDirty = !!(newUsername || newFullName || newPosition || newPassword) || newRole !== 'OPERATOR';
+  const editDirty = !!editUser && (editPassword !== '' || !editedUser || (
+    editUser.username !== editedUser.username || editUser.full_name !== editedUser.full_name
+    || (editUser.position ?? '') !== (editedUser.position ?? '') || editUser.role !== editedUser.role
+    || editUser.is_active !== editedUser.is_active
+    || [...editUser.location_ids].sort().join() !== [...editedUser.location_ids].sort().join()
+  ));
+  const requestCloseAdd = async () => { if (await confirmDiscard(addDirty)) closeAdd(); };
+  const requestCloseEdit = async () => { if (await confirmDiscard(editDirty)) setEditOpen(false); };
   const assignableLocations = sortByName(locations.filter(l => l.is_active), l => l.name);
 
   return (
@@ -319,21 +331,19 @@ const AdminUsers = forwardRef<RefreshHandle, {
                 <tr
                   key={user.id}
                   className={user.is_active ? 'is-clickable' : 'is-clickable is-off'}
-                  tabIndex={0}
                   onClick={() => openEdit(user)}
-                  onKeyDown={e => { if (e.key === 'Enter') openEdit(user); }}
                 >
                   <td>
-                    <div className="cell-main">
+                    <button type="button" className="cell-main row-link">
                       <Avatar name={user.full_name} online={user.online} active={user.is_active} size={36} tone="auto" />
-                      <div className="min-w-0">
+                      <span className="min-w-0">
                         <b>
                           {user.full_name}
                           {user.id === currentUserId && <span className="tag-you">Ty</span>}
                         </b>
                         <span className="cell-sub">{user.position || `@${user.username}`}</span>
-                      </div>
-                    </div>
+                      </span>
+                    </button>
                   </td>
                   <td>
                     {user.role === 'ADMIN'
@@ -355,10 +365,10 @@ const AdminUsers = forwardRef<RefreshHandle, {
 
       <Drawer
         open={addOpen}
-        onClose={closeAdd}
+        onClose={requestCloseAdd}
         title="Nowy użytkownik"
         footer={<>
-          <Button onClick={closeAdd}>Anuluj</Button>
+          <Button onClick={requestCloseAdd}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleAdd()} disabled={adding}>
             {adding ? 'Dodawanie…' : 'Dodaj użytkownika'}
@@ -388,11 +398,11 @@ const AdminUsers = forwardRef<RefreshHandle, {
 
       <Drawer
         open={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={requestCloseEdit}
         title={editedUser?.full_name ?? editUser?.full_name ?? 'Użytkownik'}
         leading={editUser && <Avatar name={editUser.full_name || '?'} online={editedUser?.online ?? editUser.online} active={editUser.is_active} size={36} tone="auto" />}
         footer={<>
-          <Button onClick={() => setEditOpen(false)}>Anuluj</Button>
+          <Button onClick={requestCloseEdit}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleSaveEdit()} disabled={saving}>
             {saving ? 'Zapisywanie…' : 'Zapisz'}

@@ -36,7 +36,7 @@
   .btn-danger-solid:hover:not(:disabled) { background: var(--red-700); border-color: var(--red-700); }
 }
 
-.btn kbd { height: 18px; min-width: 18px; padding: 0 4px; font-size: 11px; background: transparent; color: inherit; border-color: currentColor; border-bottom-width: 1px; opacity: .55; }
+.btn kbd { height: 18px; min-width: 18px; padding: 0 4px; font-size: 11px; background: transparent; color: inherit; border-color: color-mix(in srgb, currentColor 60%, transparent); border-bottom-width: 1px; }
 
 .icon-btn {
   width: 34px; height: 34px; padding: 0; flex-shrink: 0;
@@ -54,7 +54,7 @@ kbd {
   min-width: 20px; height: 20px; padding: 0 5px;
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--border-default); border-radius: var(--radius-xs);
-  background: transparent; color: var(--text-muted);
+  background: transparent; color: var(--text-muted-strong);
 }
 .kbd-group { display: inline-flex; gap: 3px; }
 
@@ -67,7 +67,7 @@ kbd {
 
 .input {
   height: 38px; width: 100%; padding: 0 11px; border-radius: var(--radius-md);
-  border: 1px solid var(--border-default); background: var(--surface-card); color: var(--text-strong);
+  border: 1px solid var(--border-control); background: var(--surface-card); color: var(--text-strong);
   font-family: var(--font-ui); font-size: var(--text-base);
   transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
 }
@@ -146,7 +146,7 @@ textarea.input { height: auto; padding: 9px 11px; resize: vertical; line-height:
 /* ——— Włącznik ——— */
 .switch {
   position: relative; width: 36px; height: 22px; border-radius: var(--radius-pill); border: 0; padding: 0;
-  background: var(--border-default); cursor: pointer; flex-shrink: 0; transition: background-color var(--dur-base) ease;
+  background: var(--border-control); cursor: pointer; flex-shrink: 0; transition: background-color var(--dur-base) ease;
 }
 .switch::after {
   content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
@@ -177,12 +177,12 @@ textarea.input { height: auto; padding: 9px 11px; resize: vertical; line-height:
   background: var(--text-strong); transform: scaleX(0); opacity: 0;
   transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-fast) ease;
 }
-.seg button[aria-selected="true"] { color: var(--text-strong); }
-.seg button[aria-selected="true"]::after { transform: none; opacity: 1; }
+.seg button[aria-selected="true"], .seg button[aria-checked="true"] { color: var(--text-strong); }
+.seg button[aria-selected="true"]::after, .seg button[aria-checked="true"]::after { transform: none; opacity: 1; }
 @media (hover: hover) and (pointer: fine) {
   .seg button:hover { color: var(--text-strong); }
 }
-:root[data-contrast="high"] .seg button[aria-selected="true"]::after { height: 3px; }
+:root[data-contrast="high"] .seg button[aria-selected="true"]::after, :root[data-contrast="high"] .seg button[aria-checked="true"]::after { height: 3px; }
 .seg button:focus-visible { outline-offset: -2px; }
 .seg .seg-letter { font-family: var(--font-mono); font-weight: 700; color: var(--text-brand); }
 .seg .seg-count { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -199,7 +199,7 @@ textarea.input { height: auto; padding: 9px 11px; resize: vertical; line-height:
 .pill-serving { color: var(--text-brand); }
 .pill-serving::before { background: var(--queue-serving-dot); }
 .pill-served, .pill-online { color: var(--queue-served); }
-.pill-served::before, .pill-online::before { background: var(--queue-served); }
+.pill-served::before, .pill-online::before { background: var(--queue-served-dot); }
 .pill-skipped { color: var(--queue-skipped); }
 .pill-skipped::before { background: var(--queue-skipped); border-radius: 1px; transform: rotate(45deg); width: 6px; height: 6px; }
 .pill-offline { color: var(--text-muted); }
@@ -237,7 +237,7 @@ textarea.input { height: auto; padding: 9px 11px; resize: vertical; line-height:
 
 /* ——— Wskaźnik połączenia: stała kropka, bez pulsowania (stan się nie zmienia — nie ma czego animować) ——— */
 .live { display: inline-flex; align-items: center; gap: 7px; font-size: var(--text-sm); font-weight: 600; color: var(--text-body); white-space: nowrap; }
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--queue-served); flex-shrink: 0; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--queue-served-dot); flex-shrink: 0; }
 .live.is-lost { color: var(--queue-waiting); }
 .live.is-lost .live-dot { background: var(--queue-waiting-dot); }
 
@@ -390,7 +390,7 @@ textarea.input { height: auto; padding: 9px 11px; resize: vertical; line-height:
   .switch:disabled::after, .switch[aria-checked="true"]:disabled { background: GrayText; border-color: GrayText; }
   .switch[aria-checked="true"]:disabled::after { background: Canvas; }
 
-  .seg button[aria-selected="true"]::after { forced-color-adjust: none; background: Highlight; }
+  .seg button[aria-selected="true"]::after, .seg button[aria-checked="true"]::after { forced-color-adjust: none; background: Highlight; }
 
   .select-option.is-highlighted,
   .cmdk li[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }

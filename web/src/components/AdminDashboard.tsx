@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { confirmDiscard } from '../lib/formGuards';
 import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
 import { sortByName } from '../lib/sort';
@@ -264,6 +265,11 @@ const AdminDashboard = forwardRef<RefreshHandle, {
   }, (a, b) => a.name.localeCompare(b.name, 'pl'));
   const editedDevice = editing ? devices.find(d => d.id === editing.id) : undefined;
 
+  const editDirty = !!editing && !!editedDevice && (
+    (editing.name ?? '') !== (editedDevice.name ?? '') || editing.location_id !== editedDevice.location_id || editing.is_active !== editedDevice.is_active
+  );
+  const requestCloseEdit = async () => { if (await confirmDiscard(editDirty)) setEditOpen(false); };
+
   return (
     <>
       <div className="filters">
@@ -306,17 +312,15 @@ const AdminDashboard = forwardRef<RefreshHandle, {
                 <tr
                   key={device.id}
                   className={device.is_active ? 'is-clickable' : 'is-clickable is-off'}
-                  tabIndex={0}
                   onClick={() => openEdit(device)}
-                  onKeyDown={e => { if (e.key === 'Enter') openEdit(device); }}
                 >
                   <td>
-                    <div className="cell-main">
+                    <button type="button" className="cell-main row-link">
                       <span className={device.is_active ? 'tile' : 'tile is-off'}><Icon name="tablet" /></span>
                       {device.name
                         ? <b>{device.name}</b>
                         : <b className="text-warn">Bez nazwy</b>}
-                    </div>
+                    </button>
                   </td>
                   <td>
                     {location
@@ -373,11 +377,11 @@ const AdminDashboard = forwardRef<RefreshHandle, {
 
       <Drawer
         open={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={requestCloseEdit}
         title={editedDevice?.name || editing?.name || 'Tablet bez nazwy'}
         leading={editing && <span className={editing.is_active ? 'tile' : 'tile is-off'}><Icon name="tablet" /></span>}
         footer={<>
-          <Button onClick={() => setEditOpen(false)}>Anuluj</Button>
+          <Button onClick={requestCloseEdit}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleSaveEdit()} disabled={saving}>
             {saving ? 'Zapisywanie…' : 'Zapisz'}

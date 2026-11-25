@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { focusFirstInvalid, confirmDiscard } from '../lib/formGuards';
 import { api, ApiError } from '../lib/api';
 import { ws } from '../lib/ws';
 import { sortByName } from '../lib/sort';
@@ -143,6 +144,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
     e?.preventDefault();
     if (!newName.trim()) {
       setAddError('Wpisz nazwę lokalizacji, np. Gabinet 12.');
+      focusFirstInvalid();
       return;
     }
     setAdding(true);
@@ -213,6 +215,7 @@ const AdminLocations = forwardRef<RefreshHandle, {
     if (!draft) return;
     if (!draft.name.trim()) {
       setEditError('Nazwa nie może być pusta. Wpisz np. Gabinet 12.');
+      focusFirstInvalid();
       return;
     }
 
@@ -275,6 +278,11 @@ const AdminLocations = forwardRef<RefreshHandle, {
     status: l => locationStatus(l).label,
   }, (a, b) => a.name.localeCompare(b.name, 'pl'));
   const editedLocation = draft ? locations.find(l => l.id === draft.id) : undefined;
+
+  const addDirty = newName !== '' || newDescription !== '';
+  const editDirty = !!draft && (!editedLocation || JSON.stringify(toDraft(editedLocation)) !== JSON.stringify(draft));
+  const requestCloseAdd = async () => { if (await confirmDiscard(addDirty)) closeAdd(); };
+  const requestCloseEdit = async () => { if (await confirmDiscard(editDirty)) setEditOpen(false); };
   const assignableUsers = sortByName(users.filter(u => u.is_active && u.role === 'OPERATOR'), u => u.full_name);
 
   return (
@@ -321,18 +329,16 @@ const AdminLocations = forwardRef<RefreshHandle, {
                 <tr
                   key={location.id}
                   className={location.is_active ? 'is-clickable' : 'is-clickable is-off'}
-                  tabIndex={0}
                   onClick={() => openEdit(location)}
-                  onKeyDown={e => { if (e.key === 'Enter') openEdit(location); }}
                 >
                   <td>
-                    <div className="cell-main">
+                    <button type="button" className="cell-main row-link">
                       <QueueLetter letter={location.queue_code} off={!location.is_active} />
-                      <div className="min-w-0">
+                      <span className="min-w-0">
                         <b>{location.name}</b>
                         <span className="cell-sub">{location.description || 'Brak opisu'}</span>
-                      </div>
-                    </div>
+                      </span>
+                    </button>
                   </td>
                   <td>
                     {location.tablet
@@ -358,10 +364,10 @@ const AdminLocations = forwardRef<RefreshHandle, {
 
       <Drawer
         open={addOpen}
-        onClose={closeAdd}
+        onClose={requestCloseAdd}
         title="Nowa lokalizacja"
         footer={<>
-          <Button onClick={closeAdd}>Anuluj</Button>
+          <Button onClick={requestCloseAdd}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleAddLocation()} disabled={adding}>
             {adding ? 'Dodawanie…' : 'Dodaj lokalizację'}
@@ -385,11 +391,11 @@ const AdminLocations = forwardRef<RefreshHandle, {
 
       <Drawer
         open={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={requestCloseEdit}
         title={editedLocation?.name ?? draft?.name ?? 'Lokalizacja'}
         leading={draft && <QueueLetter letter={draft.queue_code} off={!draft.is_active} size="lg" />}
         footer={<>
-          <Button onClick={() => setEditOpen(false)}>Anuluj</Button>
+          <Button onClick={requestCloseEdit}>Anuluj</Button>
           <span className="grow" />
           <Button variant="primary" onClick={() => handleSaveEdit()} disabled={saving}>
             {saving ? 'Zapisywanie…' : 'Zapisz'}

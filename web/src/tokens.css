@@ -73,11 +73,13 @@
   --text-strong: var(--slate-900);
   --text-body:   var(--slate-700);
   --text-muted:  var(--slate-500);
+  --text-muted-strong: var(--slate-600); /* tekst pomocniczy na tle strony i „zapadniętym” (muted ma tam 4,07–4,34:1) */
   --text-faint:  var(--slate-400);    /* tylko dekoracje i placeholdery — za słaby na treść */
   --text-brand:  var(--teal-700);
 
   --border-subtle:  var(--slate-200);
   --border-default: var(--slate-300);
+  --border-control: var(--slate-500); /* obramowanie pól i tor wyłączonego przełącznika (min. 3:1, WCAG 1.4.11) */
   --focus-ring:     var(--teal-600);  /* było teal-400: za mały kontrast obrysu na bieli */
 
   /* Statusy kolejki — 1:1 z EQueColors.queue* */
@@ -85,7 +87,8 @@
   --queue-waiting-bg: var(--amber-50); --queue-waiting-border: var(--amber-100);
   --queue-serving: var(--teal-700);   --queue-serving-dot: var(--teal-500);
   --queue-serving-bg: var(--teal-50); --queue-serving-border: var(--teal-200);
-  --queue-served: var(--green-600);
+  --queue-served: var(--green-700);   /* tekst statusu: 6,37:1 (green-600 miał 4,44:1 na białym) */
+  --queue-served-dot: var(--green-600); /* kropka zostaje w żywszym kolorze */
   --queue-served-bg: var(--green-50); --queue-served-border: var(--green-100);
   --queue-skipped: var(--red-600);
   --queue-skipped-bg: var(--red-50);  --queue-skipped-border: var(--red-100);
@@ -276,8 +279,10 @@ h1, h2, h3, h4 { font-family: var(--font-ui); color: var(--text-strong); font-we
   --text-body:  var(--slate-900);
   --text-muted: var(--slate-700);
   --text-faint: var(--slate-600);
+  --text-muted-strong: var(--slate-800);
   --border-subtle:  var(--slate-500);
   --border-default: var(--slate-700);
+  --border-control: var(--slate-700);
 }
 :root[data-contrast="high"] :focus-visible { outline-width: 3px; outline-offset: 3px; }
 

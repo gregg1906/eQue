@@ -13,7 +13,7 @@ export interface ToastItem {
 export interface ToastOptions {
   tone?: ToastTone;
   undo?: () => void;
-  /** Domyślnie 6 s (błąd: 8 s). */
+  /** Domyślnie 6 s. Błąd zostaje na ekranie, dopóki go nie zamkniesz (WCAG 2.2.1) — chyba że podasz czas. */
   duration?: number;
 }
 
@@ -50,7 +50,8 @@ export function showToast(text: string, opts: ToastOptions = {}): number {
   const tone = opts.tone ?? 'default';
   const item: ToastItem = { id: ++seq, text, tone, undo: opts.undo };
   setState({ item, closing: false });
-  timer = setTimeout(() => dismissToast(item.id), opts.duration ?? (tone === 'error' ? 8000 : DEFAULT_DURATION_MS));
+  const duration = opts.duration ?? (tone === 'error' ? null : DEFAULT_DURATION_MS);
+  if (duration !== null) timer = setTimeout(() => dismissToast(item.id), duration);
   return item.id;
 }
 
