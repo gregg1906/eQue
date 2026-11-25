@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { api } from '../lib/api';
+import { MOD_KEY } from '../lib/platform';
 import { ws, type WsMessage } from '../lib/ws';
 import { sortByName } from '../lib/sort';
 import type { LocationResponse, QueueResponse, RefreshHandle, ServingTicket, TicketHistoryEntry, TicketResponse } from '../lib/apiTypes';
@@ -81,8 +82,9 @@ function ServingPanel({ location, queue, serving, othersServing, onDone, onNoSho
         </div>
         <TicketCode key={serving.id} code={serving.ticket_code} size="hero" className="serving-code-anim" />
         <div className="serving-who">
-          <b>{serving.customer_name || 'Bez nazwiska'}</b>
-          <span>Dołączono o {joinedLine(serving)}</span>
+          {serving.customer_name
+            ? <><b>{serving.customer_name}</b><span>Dołączono o {joinedLine(serving)}</span></>
+            : <b>Dołączono o {joinedLine(serving)}</b>}
         </div>
         <div className="serving-actions">
           <Button variant="primary" size="lg" icon="check" kbd={shortcuts ? 'Enter' : undefined} onClick={onDone}>
@@ -403,11 +405,20 @@ const UserQueue = forwardRef<RefreshHandle, {
                         <span className="qpos">{i + 1}</span>
                         <TicketCode code={entry.ticket_code} />
                         <div className="qname">
-                          <b>{entry.customer_name || 'Bez nazwiska'}</b>
-                          <span>
-                            {joinedLine(entry)}
-                            <span className={long ? 'qwait-inline is-long' : 'qwait-inline'}> · {wait} min</span>
-                          </span>
+                          {entry.customer_name ? (
+                            <>
+                              <b>{entry.customer_name}</b>
+                              <span>
+                                {joinedLine(entry)}
+                                <span className={long ? 'qwait-inline is-long' : 'qwait-inline'}> · {wait} min</span>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <b>Dołączono o {joinedLine(entry)}</b>
+                              <span className={long ? 'qwait-inline is-long' : 'qwait-inline'}>Czeka {wait} min</span>
+                            </>
+                          )}
                         </div>
                         <span className={long ? 'qwait is-long' : 'qwait'} title="Czas oczekiwania">{wait} min</span>
                         <span className="qlist-actions">
@@ -435,11 +446,13 @@ const UserQueue = forwardRef<RefreshHandle, {
                       <span className="qpos" />
                       <TicketCode code={entry.ticket_code} state="done" />
                       <div className="qname">
-                        <b>{entry.customer_name || 'Bez nazwiska'}</b>
-                        <span>
-                          Zakończono o {entry.served_at ? formatTime(entry.served_at) : '–'}
-                          {byOther && ` · ${entry.served_by_name ?? 'inny operator'}`}
-                        </span>
+                        {(() => {
+                          const doneAt = `Zakończono o ${entry.served_at ? formatTime(entry.served_at) : '–'}`;
+                          const other = byOther ? (entry.served_by_name ?? 'inny operator') : null;
+                          return entry.customer_name
+                            ? <><b>{entry.customer_name}</b><span>{doneAt}{other && ` · ${other}`}</span></>
+                            : <><b>{doneAt}</b>{other && <span>{other}</span>}</>;
+                        })()}
                       </div>
                       <span className="qlist-spacer" />
                       <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
@@ -484,7 +497,7 @@ const UserQueue = forwardRef<RefreshHandle, {
                   <div><dt>Nie zgłosił się</dt><dd><Kbd keys="N" /></dd></div>
                   <div><dt>Wstrzymaj lub wznów zapisy</dt><dd><Kbd keys="P" /></dd></div>
                 </>}
-                <div><dt>Szukaj i przejdź</dt><dd><Kbd keys={['Ctrl', 'K']} /></dd></div>
+                <div><dt>Szukaj i przejdź</dt><dd><Kbd keys={[MOD_KEY, 'K']} /></dd></div>
               </dl>
             </section>
           </aside>

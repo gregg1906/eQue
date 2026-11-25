@@ -239,13 +239,22 @@ def _location_to_response(loc: models.Location) -> LocationResponse:
 _UNAMBIGUOUS_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 
+def _queue_code_candidates():
+    """A, B, …, Z, a potem AA, AB, …, ZZ (kolumna queue_code ma 2 znaki, ticket_code 10)."""
+    letters = string.ascii_uppercase
+    yield from letters
+    for first in letters:
+        for second in letters:
+            yield first + second
+
+
 def _next_queue_code(db: Session) -> str:
-    """Zwraca pierwszą wolną literę A-Z jako kod kolejki nowej lokalizacji."""
+    """Zwraca pierwszy wolny kod kolejki nowej lokalizacji (A-Z, potem AA-ZZ: razem 702)."""
     used = {code for (code,) in db.query(models.Location.queue_code).all()}
-    for letter in string.ascii_uppercase:
-        if letter not in used:
-            return letter
-    raise HTTPException(status_code=409, detail="Wyczerpano dostępne litery kodów kolejki (A-Z)")
+    for code in _queue_code_candidates():
+        if code not in used:
+            return code
+    raise HTTPException(status_code=409, detail="Wyczerpano dostępne kody kolejki (A-ZZ)")
 
 
 def _generate_pairing_token(db: Session) -> str:

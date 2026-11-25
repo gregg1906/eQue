@@ -1,3 +1,4 @@
+import { IS_MAC, MOD_KEY } from './lib/platform';
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import LoginForm from './components/LoginForm';
 import AdminHome, { type NavigateOptions } from './components/AdminHome';
@@ -76,8 +77,6 @@ const NO_LOCATIONS: number[] = [];
 
 const SESSION_EXPIRED = 'Twoja sesja wygasła. Zaloguj się ponownie, żeby kontynuować pracę.';
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-const MOD_KEY = IS_MAC ? '⌘' : 'Ctrl';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);

@@ -5,7 +5,7 @@ import { sortByName } from '../lib/sort';
 import { useTableSort, sortRows } from '../lib/useTableSort';
 import SortHeader from './ui/SortHeader';
 import { plural } from '../lib/plural';
-import { minutesSince, LONG_WAIT_MIN } from '../lib/time';
+import { formatTime, minutesSince, LONG_WAIT_MIN } from '../lib/time';
 import { useTick } from '../lib/useTick';
 import type { LocationResponse, QueueResponse, RefreshHandle } from '../lib/apiTypes';
 import { outcomeOf, useShiftHistory } from '../lib/useShiftHistory';
@@ -138,7 +138,7 @@ const UserHome = forwardRef<RefreshHandle, {
               <li key={entry.id} className="attention-item">
                 <TicketCode code={entry.ticket_code} />
                 <div className="attention-txt">
-                  <b>{entry.customer_name || 'Bez nazwiska'}</b>
+                  <b>{entry.customer_name || `Dołączono o ${formatTime(entry.joined_at)}`}</b>
                   <span>{location.name} · <span className={wait >= LONG_WAIT_MIN ? 'text-warn' : undefined}>czeka {wait} min</span></span>
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => onOpenQueue(location.id)}>Do kolejki</Button>

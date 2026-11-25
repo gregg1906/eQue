@@ -25,10 +25,10 @@ export function useQueueSummaries(locationIds: number[], enabled: boolean): Queu
 
     const load = async () => {
       try {
-        // alfabetycznie po literze kolejki (A, B, C…), przy tej samej literze po nazwie
+        // po kodzie kolejki (A…Z, potem AA…), przy tej samej literze po nazwie
         const locs = (await api.get<LocationResponse[]>('/admin/locations'))
           .filter(l => l.is_active && locationIds.includes(l.id))
-          .sort((a, b) => a.queue_code.localeCompare(b.queue_code, 'pl') || a.name.localeCompare(b.name, 'pl'));
+          .sort((a, b) => a.queue_code.length - b.queue_code.length || a.queue_code.localeCompare(b.queue_code, 'pl') || a.name.localeCompare(b.name, 'pl'));
         const queues = await Promise.all(locs.map(l => api.get<QueueResponse>(`/admin/locations/${l.id}/queue`)));
         if (!cancelled) {
           setSummaries(locs.map((l, i) => ({ id: l.id, queue_code: l.queue_code, name: l.name, waiting: queues[i].waiting.length })));

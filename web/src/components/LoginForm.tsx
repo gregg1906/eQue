@@ -12,7 +12,7 @@ interface LoginFormProps {
   notice?: string | null;
 }
 
-const FACILITY_NAME = 'Testowy szpital';
+const FACILITY_NAME = import.meta.env.VITE_FACILITY_NAME || 'Testowy szpital';
 const INVALID_CREDENTIALS = 'Nieprawidłowy login lub hasło. Sprawdź, czy Caps Lock jest wyłączony.';
 
 export default function LoginForm({ onLoginSuccess, notice = null }: LoginFormProps) {
