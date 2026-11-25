@@ -57,10 +57,10 @@ function stepsFor(action: QueueAction): string[] {
   }
 }
 
-async function post(path: string, token: string | null): Promise<unknown> {
+async function post(path: string, token: string | null, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`/api/v1${path}`, { method: 'POST', headers, keepalive: true });
+  const res = await fetch(`/api/v1${path}`, { method: 'POST', headers, keepalive: true, body: body !== undefined ? JSON.stringify(body) : undefined });
   if (!res.ok) {
     // po wylogowaniu (brak bieżącego tokena) nie ma już sesji do zakończenia
     if (res.status === 401 && getToken()) notifyUnauthorized();
@@ -127,6 +127,20 @@ class QueueActionController {
     this.timers.set(id, setTimeout(() => this.flush(id, 'sequential'), windowMs));
     this.toastIds.set(id, showToast(text, { undo: () => this.undo(id), duration: windowMs }));
   };
+
+  /**
+    Akcja bez okna „Cofnij” (wezwij ponownie, dodaj osobę): najpierw wychodzą oczekujące akcje, żeby serwer
+    widział je w kolejności kliknięć (np. wezwanie, zanim pójdzie jego ponowienie), potem ta. Błąd leci do wołającego.
+  */
+  immediate = (path: string, body?: unknown): Promise<unknown> => {
+    this.flushAll('sequential');
+    const result = this.chain.then(() => post(path, getToken(), body));
+    this.chain = result.then(() => {}, () => {});
+    return result;
+  };
+
+  /** Wyślij od razu wszystko, co czeka w oknie „Cofnij” (kolejność jak w kliknięciach). */
+  flushPending = () => this.flushAll('sequential');
 
   undo = (id: number) => {
     const entry = this.entries.find(e => e.id === id);
@@ -225,7 +239,7 @@ export function useQueueActions(afterSend: AfterSend) {
     };
   }, [controller]);
 
-  return { entries, perform: controller.perform };
+  return { entries, perform: controller.perform, immediate: controller.immediate, flushPending: controller.flushPending };
 }
 
 type Serving = ServingTicket[];

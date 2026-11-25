@@ -27,7 +27,7 @@ from datetime import date, datetime, timezone
 from clock import local_today, local_day_start_utc
 from typing import Optional
 from schemas.api_schemas import (
-    KioskStatusResponse, SignupCodeResponse, JoinQueueRequest, JoinQueueResponse, PatientCancelRequest,
+    KioskStatusResponse, SignupCodeResponse, JoinQueueRequest, JoinQueueResponse, ManualTicketRequest, PatientCancelRequest,
     TicketStatusResponse,
     TabletCreate, TabletUpdate, TabletResponse,
     LoginRequest, TokenResponse, MeResponse, ChangePasswordRequest, PasswordChangedResponse,
@@ -1109,26 +1109,25 @@ async def _record_public_failure(request: Request, scope: str) -> None:
         await redis_client.expire(key, PUBLIC_WINDOW_SECONDS)
 
 
-@app.post("/api/v1/queue/join", response_model=JoinQueueResponse, status_code=201, tags=["Patient"])
-async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = Depends(get_db)):
+async def _issue_ticket(
+    request: Request,
+    db: Session,
+    location_id: int,
+    customer_name: str | None,
+    appointment_time: str | None,
+) -> JoinQueueResponse:
     """
-    Dołącza do kolejki przez wpisany (lub zeskanowany) KOD ZAPISU — krótkotrwały
-    kod z ekranu kiosku (patrz GET /kiosk/signup-code), rozwiązywany przez Redis
-    na location_id. Tworzy Ticket(status=WAITING) z kodem <queue_code><numer_dnia>,
-    np. "A01", wylicza pozycję i szacowany czas.
-    """
-    await _check_public_limit(request, "join")
-    location_id_raw = await request.app.state.redis.get(f"signup_lookup:{payload.signup_code.strip()}")
-    if not location_id_raw:
-        await _record_public_failure(request, "join")
-        raise HTTPException(status_code=404, detail="Nieprawidłowy lub wygasły kod zapisu")
+    Wspólna część zapisu do kolejki: kiosk (/queue/join) i operator (F3). Tworzy bilet
+    WAITING z kodem <queue_code><numer_dnia>, wylicza pozycję i szacowany czas,
+    rozsyła ticket.created i QUEUE_UPDATE.
 
-    # SELECT … FOR UPDATE: równoległe zapisy do tej samej lokalizacji czekają tu na siebie
-    # aż do commita, więc każdy widzi bilet poprzedniego i dostaje kolejny numer.
-    # Wcześniej oba liczyły tę samą liczbę biletów i dostawały ten sam kod.
+    SELECT … FOR UPDATE: równoległe zapisy do tej samej lokalizacji czekają tu na siebie
+    aż do commita, więc każdy widzi bilet poprzedniego i dostaje kolejny numer.
+    Wcześniej oba liczyły tę samą liczbę biletów i dostawały ten sam kod.
+    """
     loc = (
         db.query(models.Location)
-        .filter(models.Location.id == int(location_id_raw))
+        .filter(models.Location.id == location_id)
         .with_for_update()
         .first()
     )
@@ -1139,7 +1138,6 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
     if not loc.accepting_new_tickets:
         raise HTTPException(status_code=409, detail="Zapisy do tej kolejki są tymczasowo wstrzymane")
 
-    location_id = loc.id
     now = datetime.now(timezone.utc)
     day = local_today(now)
     code = _generate_ticket_code(loc, day, db)
@@ -1150,8 +1148,8 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
         location_id=location_id,
         joined_at=now,
         service_date=day,
-        customer_name=payload.customer_name,
-        appointment_time=payload.appointment_time,
+        customer_name=customer_name,
+        appointment_time=appointment_time,
     )
     db.add(ticket)
     try:
@@ -1191,6 +1189,47 @@ async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = 
         estimated_wait_time_minutes=estimated_wait_time_minutes,
         total_in_queue=queue_position + 1,
     )
+
+
+@app.post("/api/v1/queue/join", response_model=JoinQueueResponse, status_code=201, tags=["Patient"])
+async def join_queue(payload: JoinQueueRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    Dołącza do kolejki przez wpisany (lub zeskanowany) KOD ZAPISU — krótkotrwały
+    kod z ekranu kiosku (patrz GET /kiosk/signup-code), rozwiązywany przez Redis
+    na location_id. Tworzy Ticket(status=WAITING) z kodem <queue_code><numer_dnia>,
+    np. "A01", wylicza pozycję i szacowany czas.
+    """
+    await _check_public_limit(request, "join")
+    location_id_raw = await request.app.state.redis.get(f"signup_lookup:{payload.signup_code.strip()}")
+    if not location_id_raw:
+        await _record_public_failure(request, "join")
+        raise HTTPException(status_code=404, detail="Nieprawidłowy lub wygasły kod zapisu")
+    return await _issue_ticket(
+        request, db, int(location_id_raw), payload.customer_name, payload.appointment_time,
+    )
+
+
+@app.post(
+    "/api/v1/admin/locations/{location_id}/tickets",
+    response_model=JoinQueueResponse,
+    status_code=201,
+    tags=["Admin — Queue"],
+)
+async def add_ticket_manually(
+    location_id: int,
+    payload: ManualTicketRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Ręczne dodanie osoby do kolejki przez operatora (F3) — dla kogoś bez telefonu,
+    starszego albo z niepełnosprawnością. Nazwisko opcjonalne. Ta sama numeracja
+    i blokada co /queue/join; przy wstrzymanych zapisach 409, tak jak z kiosku.
+    Odpowiedź zawiera numer biletu, który operator przekazuje osobie.
+    """
+    ensure_location_access(current_user, location_id)
+    return await _issue_ticket(request, db, location_id, payload.customer_name, None)
 
 
 def _find_ticket_by_code(ticket_code: str, db: Session) -> models.Ticket | None:
@@ -2160,6 +2199,15 @@ def _ensure_own_serving(ticket: models.Ticket, user: models.User) -> None:
         )
 
 
+# F1: kolejne „Wezwij ponownie” tego samego biletu najwyżej raz na 30 s; pierwsze wezwanie też liczy się
+# jako powiadomienie, więc od razu po nim ponowienie dałoby pacjentowi dwa sygnały pod rząd.
+RECALL_COOLDOWN_SECONDS = 30
+
+
+def _recall_key(ticket_id) -> str:
+    return f"recall_cooldown:{ticket_id}"
+
+
 async def _call(ticket: models.Ticket, user: models.User, request: Request, db: Session) -> TicketResponse:
     """Wspólna część wezwania: SERVING, called_at, operator, zdarzenia dla panelu i pacjentów."""
     ticket.status = "SERVING"
@@ -2183,6 +2231,7 @@ async def _call(ticket: models.Ticket, user: models.User, request: Request, db: 
     await request.app.state.redis.publish(
         REDIS_CHANNEL, json.dumps(your_turn_msg, default=str)
     )
+    await request.app.state.redis.set(_recall_key(ticket.id), "1", ex=RECALL_COOLDOWN_SECONDS)
 
     await _broadcast_queue_updates(request.app.state.redis, ticket.location_id, db)
 
@@ -2225,6 +2274,53 @@ async def call_ticket(
     if ticket.service_date != local_today():
         raise HTTPException(status_code=409, detail="Bilet pochodzi z poprzedniego dnia.")
     return await _call(ticket, current_user, request, db)
+
+
+@app.post(
+    "/api/v1/admin/tickets/{ticket_id}/recall",
+    response_model=TicketResponse,
+    tags=["Admin — Queue"],
+)
+async def recall_ticket(
+    ticket_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Wezwij ponownie (F1) — osoba nie usłyszała wezwania. Tylko bilet SERVING z dzisiaj;
+    ponownie publikuje YOUR_TURN do pacjenta (aplikacja pokazuje wtedy powiadomienie jeszcze raz).
+    Nie zmienia biletu ani `called_at` (z niego liczy się średni czas obsługi). Wezwany bilet
+    ponawia operator, który go wezwał, albo administrator. 429, gdy ostatni sygnał poszedł
+    mniej niż 30 s temu.
+    """
+    ticket = _get_ticket_or_404(ticket_id, db)
+    ensure_location_access(current_user, ticket.location_id)
+    if ticket.status != "SERVING":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Nie można ponowić wezwania biletu o statusie '{ticket.status}' (wymagany: SERVING)",
+        )
+    _ensure_own_serving(ticket, current_user)
+    if ticket.service_date != local_today():
+        raise HTTPException(status_code=409, detail="Bilet pochodzi z poprzedniego dnia.")
+
+    redis_client = request.app.state.redis
+    key = _recall_key(ticket.id)
+    if not await redis_client.set(key, "1", nx=True, ex=RECALL_COOLDOWN_SECONDS):
+        wait = await redis_client.ttl(key)
+        wait = wait if isinstance(wait, int) and wait > 0 else RECALL_COOLDOWN_SECONDS
+        raise HTTPException(
+            status_code=429,
+            detail=f"Osoba została wezwana przed chwilą. Ponów za {wait} s.",
+            headers={"Retry-After": str(wait)},
+        )
+
+    await redis_client.publish(
+        REDIS_CHANNEL,
+        json.dumps({"topic": f"guest:{ticket.ticket_code}", "event": "YOUR_TURN"}, default=str),
+    )
+    return _ticket_to_response(ticket)
 
 
 @app.post(

@@ -100,6 +100,17 @@ export interface ServingTicket extends TicketResponse {
   served_by_name: string | null;
 }
 
+/** Odpowiedź POST /admin/locations/{id}/tickets (F3) — to samo, co dostaje klient po zapisie z kiosku. */
+export interface ManualTicketResult {
+  ticket_id: string;
+  ticket_code: string;
+  /** Ile osób czeka przed tym biletem. */
+  queue_position: number;
+  location_id: number;
+  estimated_wait_time_minutes: number;
+  total_in_queue: number | null;
+}
+
 export interface QueueResponse {
   location_id: number;
   waiting: TicketResponse[];

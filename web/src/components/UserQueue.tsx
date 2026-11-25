@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { MOD_KEY } from '../lib/platform';
 import { ws, type WsMessage } from '../lib/ws';
 import { sortByName } from '../lib/sort';
-import type { LocationResponse, QueueResponse, RefreshHandle, ServingTicket, TicketHistoryEntry, TicketResponse } from '../lib/apiTypes';
+import type { LocationResponse, ManualTicketResult, QueueResponse, RefreshHandle, ServingTicket, TicketHistoryEntry, TicketResponse } from '../lib/apiTypes';
 import { usePreferences } from '../lib/preferences';
 import { outcomeOf, useShiftHistory } from '../lib/useShiftHistory';
 import { formatTime, minutesSince, LONG_WAIT_MIN } from '../lib/time';
@@ -11,6 +11,7 @@ import { useTick } from '../lib/useTick';
 import { useHotkeys } from '../lib/useHotkeys';
 import { onQueueCommand } from '../lib/commands';
 import { useQueueActions, applyQueueActions, applyLocationActions, type Entry, type QueueAction } from '../lib/useQueueActions';
+import AddPersonDrawer from './AddPersonDrawer';
 import Button from './ui/Button';
 import Segmented from './ui/Segmented';
 import { segmentedTabId } from './ui/segmentedIds';
@@ -22,8 +23,31 @@ import Kbd from './ui/Kbd';
 import Icon from './ui/Icon';
 import { showToast } from './ui/useToast';
 
+function errorText(err: unknown) {
+  return err instanceof ApiError ? err.message : 'brak połączenia z serwerem.';
+}
+
 function joinedLine(ticket: TicketResponse) {
   return `${formatTime(ticket.joined_at)}${ticket.appointment_time ? `, wizyta ${ticket.appointment_time}` : ''}`;
+}
+
+/** Tyle sekund po wezwaniu serwer nie przyjmie ponowienia (RECALL_COOLDOWN_SECONDS w backendzie). */
+const RECALL_COOLDOWN_S = 30;
+
+/** Ile sekund zostało do `until` (ms); odświeża się co sekundę tylko, gdy jest co odliczać. */
+function useCountdown(until: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  // zegar serwera może się różnić od zegara przeglądarki — odliczanie nigdy nie przekracza pełnego limitu
+  const left = Math.min(RECALL_COOLDOWN_S, Math.max(0, Math.ceil((until - now) / 1000)));
+  useEffect(() => {
+    if (until <= Date.now()) return;
+    const id = setInterval(() => {
+      setNow(Date.now());
+      if (Date.now() >= until) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [until]);
+  return left;
 }
 
 /** Bilet wezwany przez zalogowanego operatora (najwyżej jeden — pilnuje tego serwer). */
@@ -52,7 +76,7 @@ function OtherDesks({ tickets }: { tickets: ServingTicket[] }) {
   );
 }
 
-function ServingPanel({ location, queue, serving, othersServing, onDone, onNoShow, onCallFirst, shortcuts }: {
+function ServingPanel({ location, queue, serving, othersServing, onDone, onNoShow, onCallFirst, onRecall, recallLeft, shortcuts }: {
   location: LocationResponse;
   queue: QueueResponse;
   /** Bilet zalogowanego operatora. */
@@ -62,6 +86,9 @@ function ServingPanel({ location, queue, serving, othersServing, onDone, onNoSho
   onDone: () => void;
   onNoShow: () => void;
   onCallFirst: () => void;
+  onRecall: () => void;
+  /** Sekundy do możliwego ponowienia wezwania; 0 = można od razu. */
+  recallLeft: number;
   /** Czy pokazywać skróty jednoklawiszowe (można je wyłączyć w Ustawieniach). */
   shortcuts: boolean;
 }) {
@@ -93,6 +120,15 @@ function ServingPanel({ location, queue, serving, othersServing, onDone, onNoSho
           </Button>
           <Button variant="secondary" size="lg" icon="x" kbd={shortcuts ? 'N' : undefined} onClick={onNoShow}>
             Nie zgłosił się
+          </Button>
+          {/* aria-disabled zamiast disabled: po kliknięciu fokus zostaje na przycisku, a odliczanie jest jego etykietą */}
+          <Button
+            variant="secondary" size="lg" icon="bell" kbd={shortcuts && recallLeft === 0 ? 'R' : undefined}
+            className={recallLeft > 0 ? 'is-cooling' : undefined}
+            aria-disabled={recallLeft > 0 || undefined}
+            onClick={onRecall}
+          >
+            {recallLeft > 0 ? `Wezwij ponownie za ${recallLeft} s` : 'Wezwij ponownie'}
           </Button>
         </div>
       </section>
@@ -263,7 +299,11 @@ const UserQueue = forwardRef<RefreshHandle, {
       }
     }
   };
-  const { entries, perform } = useQueueActions(afterSend);
+  const { entries, perform, immediate, flushPending } = useQueueActions(afterSend);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addKey, setAddKey] = useState(0);
+  /** Kiedy (ms) operator ostatnio ponowił wezwanie danego biletu — do odliczania przed kolejnym. */
+  const [recalledAt, setRecalledAt] = useState<Record<string, number>>({});
 
   const selectedId = available.some(l => l.id === locationId) ? locationId : null;
   const rawLocation = available.find(l => l.id === selectedId) ?? null;
@@ -273,6 +313,11 @@ const UserQueue = forwardRef<RefreshHandle, {
 
   const displayQueues = available.map(l => (queues[l.id] ? applyQueueActions(queues[l.id], entries) : undefined));
   const myTicket = myServing(queue, currentUserId);
+  const recalling = useRef(false);
+  const lastSignalMs = myTicket
+    ? Math.max(myTicket.called_at ? new Date(myTicket.called_at).getTime() : 0, recalledAt[myTicket.id] ?? 0)
+    : 0;
+  const recallLeft = useCountdown(lastSignalMs ? lastSignalMs + RECALL_COOLDOWN_S * 1000 : 0);
   const others = queue?.serving_all.filter(t => t.served_by_user_id !== currentUserId) ?? [];
 
   const resolve = (outcome: 'done' | 'noshow') => {
@@ -304,6 +349,50 @@ const UserQueue = forwardRef<RefreshHandle, {
     perform({ kind: 'call', locationId: location.id, operatorId: currentUserId, ticket, viaNext: true }, `Wezwano ${ticket.ticket_code}.`);
   };
 
+  /** Wezwanie (albo „Obsłużono, wezwij następnego”) czeka jeszcze w oknie „Cofnij” — pacjent nic nie dostał. */
+  const hasPendingCall = !!location && entries.some(e =>
+    e.status === 'pending' && e.action.kind !== 'accepting' && e.action.kind !== 'cancel'
+    && e.action.locationId === location.id && e.action.operatorId === currentUserId
+    && (e.action.kind === 'call' || e.action.next !== null));
+
+  /** F1: ponowny sygnał do osoby, która nie usłyszała wezwania. Bez okna „Cofnij” — ponowienie nic nie psuje. */
+  const recall = () => {
+    if (!myTicket || recalling.current) return;
+    const code = myTicket.ticket_code;
+    if (hasPendingCall) {
+      // pierwszy sygnał jeszcze nie wyszedł (trwa okno „Cofnij”) — ponowienie to właśnie wysłanie go teraz
+      flushPending();
+      setRecalledAt(prev => ({ ...prev, [myTicket.id]: Date.now() }));
+      showToast(`Wysłano wezwanie ${code}.`);
+      return;
+    }
+    if (recallLeft > 0) {
+      showToast(`Osoba została wezwana przed chwilą. Ponów za ${recallLeft} s.`);
+      return;
+    }
+    recalling.current = true;
+    immediate(`/admin/tickets/${myTicket.id}/recall`)
+      .then(() => {
+        setRecalledAt(prev => ({ ...prev, [myTicket.id]: Date.now() }));
+        showToast(`Ponowiono wezwanie ${code}.`);
+      })
+      .catch(err => {
+        if (err instanceof ApiError && err.status === 429) setRecalledAt(prev => ({ ...prev, [myTicket.id]: Date.now() }));
+        showToast(`Nie udało się ponowić wezwania ${code}: ${errorText(err)}`, { tone: 'error' });
+      })
+      .finally(() => { recalling.current = false; });
+  };
+
+  /** F3: dopisanie osoby bez telefonu. Numer odpowiedzi trafia do okna, więc to nie przechodzi przez „Cofnij”. */
+  const addPerson = async (customerName: string | null): Promise<ManualTicketResult> => {
+    if (!location) throw new Error('Brak lokalizacji');
+    const created = await immediate(`/admin/locations/${location.id}/tickets`, { customer_name: customerName }) as ManualTicketResult;
+    void fetchQueue(location.id);
+    return created;
+  };
+
+  const openAdd = () => { setAddKey(k => k + 1); setAddOpen(true); };
+
   const cancel = (ticket: TicketResponse) => {
     if (!location) return;
     perform({ kind: 'cancel', locationId: location.id, ticket }, `Anulowano ${ticket.ticket_code}. Osoba zniknęła z kolejki.`);
@@ -324,15 +413,17 @@ const UserQueue = forwardRef<RefreshHandle, {
   };
 
   const shortcuts = prefs.single_key_shortcuts;
-  useHotkeys({ Enter: primary, n: () => resolve('noshow'), p: togglePause }, !!location && !!queue && shortcuts);
+  useHotkeys({ Enter: primary, n: () => resolve('noshow'), r: recall, p: togglePause }, !!location && !!queue && shortcuts);
 
-  const commandsRef = useRef({ primary, noshow: () => resolve('noshow'), togglePause });
-  useEffect(() => { commandsRef.current = { primary, noshow: () => resolve('noshow'), togglePause }; });
+  const commandsRef = useRef({ primary, noshow: () => resolve('noshow'), togglePause, recall, addPerson: openAdd });
+  useEffect(() => { commandsRef.current = { primary, noshow: () => resolve('noshow'), togglePause, recall, addPerson: openAdd }; });
   useEffect(() => onQueueCommand(cmd => {
     const c = commandsRef.current;
     if (cmd.type === 'primary') c.primary();
     else if (cmd.type === 'noshow') c.noshow();
     else if (cmd.type === 'togglePause') c.togglePause();
+    else if (cmd.type === 'recall') c.recall();
+    else if (cmd.type === 'addPerson') c.addPerson();
   }), []);
 
   // Dzisiejsza historia z serwera + akcje jeszcze w oknie „Cofnij”
@@ -372,7 +463,7 @@ const UserQueue = forwardRef<RefreshHandle, {
             </span>
             <span className="sr-only" aria-live="polite">{arrival?.locationId === selectedId ? arrival.text : ''}</span>
             {queue
-              ? <ServingPanel location={location} queue={queue} serving={myTicket} othersServing={others.length > 0} onDone={() => resolve('done')} onNoShow={() => resolve('noshow')} onCallFirst={primary} shortcuts={shortcuts} />
+              ? <ServingPanel location={location} queue={queue} serving={myTicket} othersServing={others.length > 0} onDone={() => resolve('done')} onNoShow={() => resolve('noshow')} onCallFirst={primary} onRecall={recall} recallLeft={recallLeft} shortcuts={shortcuts} />
               : <div className="card card-pad muted" role="status">Wczytywanie kolejki…</div>}
             <OtherDesks tickets={others} />
 
@@ -387,8 +478,9 @@ const UserQueue = forwardRef<RefreshHandle, {
                   { value: 'done', label: 'Zakończone', count: finishedHere.length },
                 ]}
               />
-              {list === 'wait' && <p className="qlist-caption">Według godziny dołączenia · bursztynowy czas = ponad {LONG_WAIT_MIN} min</p>}
+              <Button size="sm" icon="plus" className="qlist-add" onClick={openAdd}>Dodaj osobę</Button>
             </div>
+            {list === 'wait' && <p className="qlist-caption">Według godziny dołączenia · bursztynowy czas = ponad {LONG_WAIT_MIN} min</p>}
 
             <div role="tabpanel" id="qlist-panel" aria-labelledby={segmentedTabId('qlist-panel', list)}>
             {list === 'wait' ? (
@@ -499,6 +591,7 @@ const UserQueue = forwardRef<RefreshHandle, {
                 {shortcuts && <>
                   <div><dt>Obsłużono, wezwij następnego</dt><dd><Kbd keys="Enter" /></dd></div>
                   <div><dt>Nie zgłosił się</dt><dd><Kbd keys="N" /></dd></div>
+                  <div><dt>Wezwij ponownie</dt><dd><Kbd keys="R" /></dd></div>
                   <div><dt>Wstrzymaj lub wznów zapisy</dt><dd><Kbd keys="P" /></dd></div>
                 </>}
                 <div><dt>Szukaj i przejdź</dt><dd><Kbd keys={[MOD_KEY, 'K']} /></dd></div>
@@ -506,6 +599,17 @@ const UserQueue = forwardRef<RefreshHandle, {
             </section>
           </aside>
         </div>
+      )}
+      {location && (
+        <AddPersonDrawer
+          key={addKey}
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          locationName={location.name}
+          queueCode={location.queue_code}
+          accepting={location.accepting_new_tickets}
+          onSubmit={addPerson}
+        />
       )}
     </>
   );

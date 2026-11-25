@@ -318,6 +318,8 @@ export default function App() {
     ...(role === 'user' && activeQueue ? [
       { id: 'q-primary', label: 'Obsłużono, wezwij następną osobę', group: 'Akcja', run: () => runQueueCommand({ type: 'primary' }) },
       { id: 'q-noshow', label: 'Nie zgłosił się', group: 'Akcja', run: () => runQueueCommand({ type: 'noshow' }) },
+      { id: 'q-recall', label: 'Wezwij ponownie', group: 'Akcja', run: () => runQueueCommand({ type: 'recall' }) },
+      { id: 'q-add', label: 'Dodaj osobę do kolejki', group: 'Akcja', run: () => runQueueCommand({ type: 'addPerson' }) },
       { id: 'q-pause', label: 'Wstrzymaj lub wznów zapisy', group: 'Akcja', run: () => runQueueCommand({ type: 'togglePause' }) },
     ] : []),
     ...(role === 'admin' ? [

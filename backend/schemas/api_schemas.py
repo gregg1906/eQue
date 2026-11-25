@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Literal, Optional
 import uuid
 
@@ -51,6 +51,20 @@ class JoinQueueResponse(BaseModel):
     estimated_wait_time_minutes: int
     # Ile osób czeka teraz w tej kolejce (razem z tym biletem) — do wskaźnika „pozycja / łącznie” w aplikacji.
     total_in_queue: int | None = None
+
+class ManualTicketRequest(BaseModel):
+    """
+    Body POST /admin/locations/{id}/tickets — operator dopisuje osobę bez telefonu (F3).
+    Ścisły (STRICT): to endpoint panelu, nie aplikacji mobilnej. Puste albo same spacje → bez nazwiska.
+    """
+    model_config = STRICT
+    customer_name: Optional[str] = Field(default=None, max_length=120)
+
+    @field_validator("customer_name")
+    @classmethod
+    def _strip_name(cls, v: Optional[str]) -> Optional[str]:
+        v = v.strip() if v else v
+        return v or None
 
 class PatientCancelRequest(BaseModel):
     """

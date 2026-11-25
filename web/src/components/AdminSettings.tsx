@@ -240,7 +240,7 @@ function QueueWorkCard() {
 
         <ToggleRow
           title="Skróty jednoklawiszowe"
-          text="Enter, N i P działają na ekranie kolejki bez Ctrl. Wyłącz przy sterowaniu głosem lub gdy łatwo o przypadkowe naciśnięcie."
+          text="Enter, N, R i P działają na ekranie kolejki bez Ctrl. Wyłącz przy sterowaniu głosem lub gdy łatwo o przypadkowe naciśnięcie."
           checked={prefs.single_key_shortcuts}
           onChange={single_key_shortcuts => save({ single_key_shortcuts })}
         />
